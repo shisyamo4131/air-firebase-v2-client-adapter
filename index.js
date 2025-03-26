@@ -37,30 +37,36 @@ class ClientAdapter {
   }
 
   /**
-   * Firestore のトランザクションを使用して、インスタンスに採番を行います。
-   * - `Autonumbers` コレクションから、現在の自動採番ドキュメントを取得します。
-   * - 採番可能である場合、現在値をインクリメントし、新しい採番コードをインスタンスにセットします。
-   * - `current` 値を更新するための関数を返します。（更新処理は呼び出し元で実行）
+   * Assigns an autonumber to the instance using a Firestore transaction.
+   * - Retrieves the current autonumber doc from the `Autonumbers` collection.
+   * - Increments the number and sets it on the instance.
+   * - Returns a function to update the `current` value in Firestore.
+   * - `prefix` is used to resolve the collection path if provided.
    *
-   * @param {Object} transaction - Firestore のトランザクションオブジェクト（必須）
-   * @returns {Promise<Function>} - Firestore の `current` 値を更新するための関数
-   * @throws {Error} - `transaction` が与えられていない場合
-   * @throws {Error} - `Autonumbers` コレクションに対象コレクションのドキュメントが存在しない場合
-   * @throws {Error} - 採番が無効化されている (`status: false`) 場合
-   * @throws {Error} - 採番の最大値 (`10^length - 1`) に達した場合
+   * Firestore のトランザクションを使用して、インスタンスに採番を行います。
+   * - `Autonumbers` コレクションから現在の採番情報を取得します。
+   * - 採番値をインクリメントし、インスタンスに設定します。
+   * - `current` 値を更新する関数を返します（呼び出し元で実行）。
+   * - `prefix` が指定されている場合は、コレクションパスの解決に使用されます。
+   *
+   * @param {Object} args - Autonumber options.
+   * @param {Object} args.transaction - Firestore transaction object (required).
+   * @param {string|null} [args.prefix=null] - Optional path prefix.
+   * @returns {Promise<Function>} Function that updates the current counter.
+   * @throws {Error} If transaction is not provided or autonumber is invalid.
    */
-  async setAutonumber(transaction) {
-    // transaction が指定されていなければエラーをスロー
-    if (!transaction) throw new Error("transaction is required.");
+  async setAutonumber({ transaction, prefix = null }) {
+    if (!transaction) {
+      throw new Error("transaction is required.");
+    }
 
     try {
-      const collectionPath = this.constructor.getCollectionPath();
+      const collectionPath = this.constructor.getCollectionPath(prefix);
       const docRef = doc(
         collection(ClientAdapter.firestore, "Autonumbers"),
         collectionPath
       );
 
-      // Firestore のトランザクションスコープ内でドキュメントを取得
       const docSnap = await transaction.get(docRef);
       if (!docSnap.exists()) {
         throw new Error(
@@ -76,20 +82,18 @@ class ClientAdapter {
         );
       }
 
-      // 採番するコードを生成
       const newNumber = data.current + 1;
       const length = data.length;
-      const maxValue = Math.pow(10, length) - 1; // 最大値を 10^length - 1 に変更
+      const maxValue = Math.pow(10, length) - 1;
       if (newNumber > maxValue) {
         throw new Error(
           `The maximum value for Autonumber has been reached. collection: ${collectionPath}`
         );
       }
 
-      const newCode = String(newNumber).padStart(length, "0"); // `padStart()` を使ってゼロ埋め
+      const newCode = String(newNumber).padStart(length, "0");
       this[data.field] = newCode;
 
-      // `current` 値を更新する関数を返す（呼び出し元で実行）
       return () => transaction.update(docRef, { current: newNumber });
     } catch (err) {
       console.error(
@@ -101,30 +105,44 @@ class ClientAdapter {
   }
 
   /**
-   * Firestore にドキュメントを作成します。
-   * - ドキュメントの作成は必ずトランザクション処理で実行されます。
-   *   引数 transaction が与えられなかった場合、この関数内でトランザクションが生成されます。
-   * - `docId` を指定しない場合、Firestore により自動で ID が割り当てられます。
-   * - `useAutonumber` を `true` にすると、自動採番 (`setAutonumber()`) を実行します。
-   *   但し、自動採番を行うためにはクラスの useAutonumber が true である必要があります。
-   * - `callBack` が指定されている場合、ドキュメント作成後にコールバック関数を実行します。
+   * Creates a document in Firestore.
+   * - Always runs inside a Firestore transaction. If not provided, a new transaction is created.
+   * - If `docId` is not specified, Firestore will auto-generate one.
+   * - If `useAutonumber` is `true` and the model supports it, `setAutonumber()` will be called.
+   * - If `callBack` is provided, it will run after the document is created.
+   * - If `prefix` is provided, it will be used to resolve the Firestore collection path.
    *
-   * @param {Object} args - ドキュメント作成のためのパラメータ
-   * @param {string|null} [args.docId] - 作成するドキュメントのID（オプション）
-   * @param {boolean} [args.useAutonumber=true] - `true` の場合、自動採番を実行します。
-   * @param {Object|null} [args.transaction] - Firestore のトランザクションオブジェクト
-   * @param {function|null} [args.callBack] - ドキュメント作成後に実行するコールバック関数です。
-   * @returns {Promise<DocumentReference|null>} - 作成されたドキュメントの参照を返します。
-   * @throws {Error} - `callBack` が関数でない場合はエラーをスローします。
-   * @throws {Error} - Firestore への書き込みに失敗した場合はエラーをスローします。
+   * Firestore にドキュメントを作成します。
+   * - 作成は常にトランザクション内で実行され、指定がない場合は新規にトランザクションを作成します。
+   * - `docId` が指定されていない場合は Firestore により自動で ID が割り当てられます。
+   * - `useAutonumber` が `true` の場合は、自動採番（`setAutonumber()`）が実行されます（対応モデルのみ）。
+   * - `callBack` が指定されている場合は、作成後にコールバック関数が呼び出されます。
+   * - `prefix` が指定されている場合は、Firestore のコレクションパスを解決するために使用されます。
+   *
+   * @param {Object} args - Parameters for document creation.
+   *                        ドキュメント作成のためのパラメータ。
+   * @param {string|null} [args.docId] - Optional document ID.
+   *                                     作成するドキュメントのID（任意）。
+   * @param {boolean} [args.useAutonumber=true] - Whether to assign an auto-number.
+   *                                              自動採番を行うかどうか。
+   * @param {Object|null} [args.transaction=null] - Firestore transaction object.
+   *                                                Firestore のトランザクションオブジェクト。
+   * @param {function|null} [args.callBack=null] - Optional callback executed after creation.
+   *                                               作成後に実行されるコールバック関数（任意）。
+   * @param {string|null} [args.prefix=null] - Optional Firestore path prefix.
+   *                                           コレクションパスのプレフィックス（任意）。
+   * @returns {Promise<DocumentReference|null>} A reference to the created document.
+   *                                            作成されたドキュメントの参照。
+   * @throws {Error} If `callBack` is not a function, or Firestore write fails.
+   *                 `callBack` が関数でない、または Firestore 書き込みに失敗した場合にスローされます。
    */
   async create({
     docId = null,
     useAutonumber = true,
     transaction = null,
     callBack = null,
+    prefix = null,
   }) {
-    // callBackがnull以外の場合は関数であることを確認
     if (callBack !== null && typeof callBack !== "function") {
       throw new Error(`callBack must be a function.`);
     }
@@ -133,77 +151,77 @@ class ClientAdapter {
       await this.beforeCreate();
       this.validate();
 
-      /**
-       * create 関数内で使用するトランザクション処理
-       * @param {Object} txn - Firestore のトランザクションオブジェクト
-       */
       const performTransaction = async (txn) => {
         const updateAutonumber =
           this.constructor.useAutonumber && useAutonumber
-            ? await this.setAutonumber(txn)
+            ? await this.setAutonumber({ transaction: txn, prefix })
             : null;
 
-        // ドキュメントの参照を取得
-        const collectionPath = this.constructor.getCollectionPath();
+        const collectionPath = this.constructor.getCollectionPath(prefix);
         const colRef = collection(
           ClientAdapter.firestore,
           collectionPath
         ).withConverter(this.constructor.converter());
+
         const docRef = docId ? doc(colRef, docId) : doc(colRef);
 
-        // FireModel の既定プロパティを編集
         this.docId = docRef.id;
         this.createdAt = new Date();
         this.updatedAt = new Date();
         this.uid = ClientAdapter.auth?.currentUser?.uid || "unknown";
+
         txn.set(docRef, this);
         if (updateAutonumber) await updateAutonumber();
         if (callBack) await callBack(txn);
         return docRef;
       };
 
-      // トランザクションを実行して作成したドキュメントへの参照を取得
       const docRef = transaction
         ? await performTransaction(transaction)
         : await runTransaction(ClientAdapter.firestore, performTransaction);
-      // ドキュメントへの参照を返す
+
       return docRef;
     } catch (err) {
-      console.error(`[ClientAdapter.js - create] An error has occured.`, err);
+      console.error(`[ClientAdapter.js - create] An error has occurred.`, err);
       throw err;
     }
   }
 
   /**
-   * 指定された ID に該当するドキュメントを Firestore から取得し、インスタンスに読み込みます。
-   * - ドキュメントが存在しない場合、インスタンスのデータをリセット (`initialize(null)`) します。
-   * - `transaction` が指定されている場合、トランザクションを使用して取得します。
-   * - `transaction` が `null` の場合、通常の `getDoc()` を使用して取得します。
+   * Fetches a document by ID from Firestore and loads it into the instance.
+   * - If the document does not exist, this instance is reset via `initialize(null)`.
+   * - Can be executed within a transaction.
+   * - If `prefix` is provided, it will be used to resolve the collection path.
    *
-   * @param {string} docId - 取得するドキュメントのIDです。
-   * @param {Object|null} [transaction=null] - Firestore のトランザクションオブジェクトです。（オプション）
-   * @returns {Promise<boolean>} - ドキュメントが存在した場合は `true`、存在しない場合は `false` を返します。
-   * @throws {Error} - `docId` が指定されていない場合、または Firestore の取得処理に失敗した場合
+   * Firestore から指定された ID のドキュメントを取得し、インスタンスに読み込みます。
+   * - ドキュメントが存在しない場合は、`initialize(null)` によりデータがリセットされます。
+   * - トランザクションを使用して取得することも可能です。
+   * - `prefix` が指定されている場合、それに基づいてコレクションパスを解決します。
+   *
+   * @param {Object} args - Fetch options.
+   * @param {string} args.docId - Document ID to fetch.
+   * @param {Object|null} [args.transaction=null] - Firestore transaction (optional).
+   * @param {string|null} [args.prefix=null] - Optional path prefix for collection.
+   * @returns {Promise<boolean>} `true` if document exists, `false` otherwise.
+   * @throws {Error} If `docId` is missing or Firestore fetch fails.
    */
-  async fetch(docId, transaction = null) {
+  async fetch({ docId, transaction = null, prefix = null }) {
     if (!docId) {
       throw new Error("docId is required.");
     }
 
     try {
-      const collectionPath = this.constructor.getCollectionPath();
+      const collectionPath = this.constructor.getCollectionPath(prefix);
       const colRef = collection(
         ClientAdapter.firestore,
         collectionPath
       ).withConverter(this.constructor.converter());
       const docRef = doc(colRef, docId);
 
-      // Firestore からドキュメントを取得します。
       const docSnap = transaction
         ? await transaction.get(docRef)
         : await getDoc(docRef);
 
-      // ドキュメントが存在する場合はインスタンスにデータをセットし、存在しない場合はリセットします。
       this.initialize(docSnap.exists() ? docSnap.data() : null);
 
       return docSnap.exists();
@@ -214,21 +232,28 @@ class ClientAdapter {
   }
 
   /**
-   * Firestore から指定された ID に該当するドキュメントを取得し、新しいオブジェクトとして返します。
-   * - `fetch()` はこのクラスのインスタンスにデータをセットしますが、`fetchDoc()` は新しいオブジェクトとして返します。
-   * - `transaction` が指定されている場合、トランザクションを使用して取得します。
-   * - `transaction` が `null` の場合、通常の `getDoc()` を使用して取得します。
+   * Fetches a document by ID from Firestore and returns its data as a plain object.
+   * - Unlike `fetch()`, this does not modify the current instance.
+   * - Can be executed within a transaction.
+   * - If `prefix` is provided, it will be used to resolve the collection path.
    *
-   * @param {string} docId - 取得するドキュメントのIDです。
-   * @param {Object|null} [transaction=null] - Firestore のトランザクションオブジェクトです。（オプション）
-   * @returns {Promise<Object|null>} - 取得したデータオブジェクトを返します。ドキュメントが存在しない場合は `null` を返します。
-   * @throws {Error} - `docId` が指定されていない場合、または Firestore の取得処理に失敗した場合
+   * 指定された ID のドキュメントを Firestore から取得し、データオブジェクトとして返します。
+   * - `fetch()` はインスタンスを変更しますが、`fetchDoc()` はオブジェクトとして返します。
+   * - トランザクションを使って取得することも可能です。
+   * - `prefix` が指定されていれば、それに基づいてコレクションパスを解決します。
+   *
+   * @param {Object} args - Fetch options.
+   * @param {string} args.docId - Document ID to fetch.
+   * @param {Object|null} [args.transaction=null] - Firestore transaction (optional).
+   * @param {string|null} [args.prefix=null] - Optional path prefix for collection.
+   * @returns {Promise<Object|null>} Document data or `null` if not found.
+   * @throws {Error} If `docId` is missing or Firestore fetch fails.
    */
-  async fetchDoc(docId, transaction = null) {
+  async fetchDoc({ docId, transaction = null, prefix = null }) {
     if (!docId) throw new Error(`docId is required.`);
 
     try {
-      const collectionPath = this.constructor.getCollectionPath();
+      const collectionPath = this.constructor.getCollectionPath(prefix);
       const colRef = collection(
         ClientAdapter.firestore,
         collectionPath
@@ -348,29 +373,37 @@ class ClientAdapter {
   }
 
   /**
-   * Firestore から条件に一致するドキュメントを取得します。
-   * - 指定されたクエリ条件 (`constraints`) を適用して、Firestore のドキュメントを取得します。
-   * - constraints が文字列である場合、N-Gram 検索が実行されます。
-   *   options で追加の条件を指定可能です。
-   * - constraints が配列である場合、指定されたクエリ条件での検索が実行されます。
-   * - 取得結果は `this.constructor.converter()` を通じてオブジェクトの配列として返します。
-   * - `transaction` が指定されている場合、トランザクション内で取得します。
-   * - `transaction` が `null` の場合、通常の `getDocs()` を使用します。
+   * Fetches documents from Firestore based on query constraints.
+   * - If `constraints` is a string, performs N-gram search using `tokenMap`.
+   *   Additional filters can be applied via `options`.
+   * - If `constraints` is an array, standard Firestore queries are used.
+   * - Can be executed within a transaction.
+   * - If `prefix` is provided, it will be used to resolve the collection path.
    *
-   * @param {Array|string} constraints - クエリ条件の配列または検索用の文字列
-   * @param {Array} options - 追加のクエリ条件の配列（constraints が配列の場合は無視されます。）
-   * @param {Object|null} [transaction=null] - Firestore のトランザクションオブジェクトです。（オプション）
-   * @returns {Promise<Array<Object>>} - 取得したドキュメントのデータを配列として返します。
-   * @throws {Error} - Firestore の取得処理に失敗した場合
+   * クエリ条件に一致するドキュメントを Firestore から取得します。
+   * - `constraints` が文字列なら N-gram 検索を実行します。
+   * - 配列なら通常のクエリ検索を行います。
+   * - トランザクションを使用することも可能です。
+   * - `prefix` が指定されている場合は、コレクションパスの解決に使用されます。
+   *
+   * @param {Object} args - Fetch options.
+   * @param {Array|string} args.constraints - Query condition array or search string.
+   * @param {Array} [args.options=[]] - Additional query filters (ignored if constraints is an array).
+   * @param {Object|null} [args.transaction=null] - Firestore transaction (optional).
+   * @param {string|null} [args.prefix=null] - Optional Firestore path prefix.
+   * @returns {Promise<Array<Object>>} Array of document data.
+   * @throws {Error} If constraints are invalid or Firestore query fails.
    */
-  async fetchDocs({ constraints = [], options = [] }, transaction = null) {
+  async fetchDocs({
+    constraints = [],
+    options = [],
+    transaction = null,
+    prefix = null,
+  }) {
     const queryConstraints = [];
 
-    // constraints の型に応じてクエリ条件を生成
     if (typeof constraints === "string") {
       queryConstraints.push(...this.createTokenMapQueries(constraints));
-
-      // options で指定されたクエリ条件を追加
       queryConstraints.push(...this.createQueries(options));
     } else if (Array.isArray(constraints)) {
       queryConstraints.push(...this.createQueries(constraints));
@@ -379,21 +412,18 @@ class ClientAdapter {
     }
 
     try {
-      const collectionPath = this.constructor.getCollectionPath();
+      const collectionPath = this.constructor.getCollectionPath(prefix);
       const colRef = collection(
         ClientAdapter.firestore,
         collectionPath
       ).withConverter(this.constructor.converter());
 
-      // Firestore のクエリを作成
       const queryRef = query(colRef, ...queryConstraints);
 
-      // トランザクションの有無によって取得方法を分岐
       const querySnapshot = transaction
         ? await transaction.get(queryRef)
         : await getDocs(queryRef);
 
-      // 取得したドキュメントをデータの配列として返す
       return querySnapshot.docs.map((doc) => doc.data());
     } catch (err) {
       console.error(
@@ -405,26 +435,36 @@ class ClientAdapter {
   }
 
   /**
-   * Firestore ドキュメントを現在のプロパティ値で更新します。
-   * - `this.docId` が設定されていない場合はエラーをスローします。（`fetch()` を事前に呼び出す必要があります）
-   * - `transaction` が指定されている場合、そのトランザクション内で処理を実行します。
-   * - `transaction` が `null` の場合、新規で `runTransaction()` を実行します。
-   * - `callBack` を指定すると、更新後に追加の処理を実行できます。
+   * Updates the Firestore document using the current instance data.
+   * - Requires `this.docId` to be set (must call `fetch()` beforehand).
+   * - Runs inside a transaction. If not provided, a new one will be created.
+   * - If `callBack` is specified, it will be executed after the update.
+   * - If `prefix` is provided, it is used to resolve the collection path.
    *
-   * @param {Object|null} [transaction=null] - Firestore のトランザクションオブジェクトです。（オプション）
-   * @param {function|null} [callBack=null] - 更新後に独自の処理を実行する関数です。（オプション）
-   * @returns {Promise<DocumentReference>} - 更新された Firestore ドキュメントの参照を返します。
-   * @throws {Error} - `docId` が設定されていない場合（`fetch()` を事前に実行する必要があります）。
-   * @throws {Error} - `callBack` が関数でない場合。
-   * @throws {Error} - Firestore の更新処理中にエラーが発生した場合。
+   * Firestore ドキュメントを現在のプロパティ値で更新します。
+   * - `this.docId` が設定されていない場合はエラーになります（事前に `fetch()` を実行してください）。
+   * - 更新はトランザクション内で行われます。トランザクションが指定されない場合は新たに生成されます。
+   * - `callBack` が指定されていれば、更新後に実行されます。
+   * - `prefix` が指定されている場合は、コレクションパスの解決に使用されます。
+   *
+   * @param {Object} args - Parameters for update operation.
+   *                        更新処理のためのパラメータ。
+   * @param {Object|null} [args.transaction=null] - Firestore transaction object.
+   *                                                Firestore のトランザクションオブジェクト。
+   * @param {function|null} [args.callBack=null] - Callback executed after update.
+   *                                               更新後に実行されるコールバック関数。
+   * @param {string|null} [args.prefix=null] - Optional Firestore path prefix.
+   *                                           コレクションパスのプレフィックス（任意）。
+   * @returns {Promise<DocumentReference>} Reference to the updated document.
+   *                                       更新されたドキュメントのリファレンス。
+   * @throws {Error} If `docId` is not set, or if `callBack` is not a function.
+   *                 `docId` が未設定、または `callBack` が関数でない場合にスローされます。
    */
-  async update({ transaction = null, callBack = null } = {}) {
-    // callBackがnull以外の場合は関数であることを確認
+  async update({ transaction = null, callBack = null, prefix = null } = {}) {
     if (callBack !== null && typeof callBack !== "function") {
       throw new Error(`callBack must be a function.`);
     }
 
-    // docId が設定されていなければエラーをスロー
     if (!this.docId) {
       throw new Error(
         `The docId property is required for update(). Call fetch() first.`
@@ -435,19 +475,14 @@ class ClientAdapter {
       await this.beforeUpdate();
       this.validate();
 
-      /**
-       * update 関数内で使用するトランザクション処理
-       * @param {Object} txn - Firestore のトランザクションオブジェクト
-       */
       const performTransaction = async (txn) => {
-        const collectionPath = this.constructor.getCollectionPath();
+        const collectionPath = this.constructor.getCollectionPath(prefix);
         const colRef = collection(
           ClientAdapter.firestore,
           collectionPath
         ).withConverter(this.constructor.converter());
         const docRef = doc(colRef, this.docId);
 
-        // 更新準備
         this.updatedAt = new Date();
         this.uid = ClientAdapter.auth?.currentUser?.uid || "unknown";
 
@@ -456,28 +491,31 @@ class ClientAdapter {
         return docRef;
       };
 
-      // トランザクションを実行して作成したドキュメントへの参照を取得
       const docRef = transaction
         ? await performTransaction(transaction)
         : await runTransaction(ClientAdapter.firestore, performTransaction);
 
       return docRef;
     } catch (err) {
-      console.error(`[ClientAdapter.js - update] An error has occured.`);
+      console.error(`[ClientAdapter.js - update] An error has occurred.`);
       throw err;
     }
   }
 
   /**
-   * `hasMany` プロパティにセットされた条件に基づき、現在のドキュメントに依存している子ドキュメントが
-   * 存在しているかどうかを確認します。
-   * @param {function|null} transaction - トランザクション処理を行うための関数（省略可能、デフォルトは `null`）
-   * @returns {Promise<object|boolean>} - 子ドキュメントが存在する場合は `hasMany` の該当項目を返し、
-   *                                      存在しない場合は `false` を返します。
-   * @throws {Error} - Firestore の操作中にエラーが発生した場合にスローされます。
+   * Checks if any child documents exist for this document, based on `hasMany` configuration.
+   * - For collections, the prefix is applied to the collection path.
+   *
+   * `hasMany` 設定に基づいて、このドキュメントに従属する子ドキュメントが存在するかを確認します。
+   * - コレクションタイプの定義に対しては `prefix` がパスに適用されます。
+   *
+   * @param {Object} args - Options for the check.
+   * @param {Object|null} [args.transaction=null] - Firestore transaction object (optional).
+   * @param {string|null} [args.prefix=null] - Optional path prefix for resolving collections.
+   * @returns {Promise<object|boolean>} Matching `hasMany` item if found, otherwise false.
+   * @throws {Error} If `docId` is not set or query fails.
    */
-  async hasChild(transaction = null) {
-    // docId が設定されていなければエラーをスロー
+  async hasChild({ transaction = null, prefix = null } = {}) {
     if (!this.docId) {
       throw new Error(
         `The docId property is required for delete(). Call fetch() first.`
@@ -486,51 +524,65 @@ class ClientAdapter {
 
     try {
       for (const item of this.constructor.hasMany) {
-        // コレクションまたはコレクショングループの参照を取得
+        const collectionPath =
+          item.type === "collection" && prefix
+            ? `${prefix}/${item.collection}`.replace(/^\/|\/$/g, "")
+            : item.collection;
+
         const colRef =
           item.type === "collection"
-            ? collection(ClientAdapter.firestore, item.collection)
+            ? collection(ClientAdapter.firestore, collectionPath)
             : collectionGroup(ClientAdapter.firestore, item.collection);
 
-        // クエリを作成
         const constraint = where(item.field, item.condition, this.docId);
         const queryRef = query(colRef, constraint, limit(1));
 
-        // トランザクションの有無に応じてクエリを実行
         const snapshot = transaction
           ? await transaction.get(queryRef)
           : await getDocs(queryRef);
 
-        // 子ドキュメントが存在する場合、該当の `hasMany` アイテムを返す
         if (!snapshot.empty) return item;
       }
 
-      // 子ドキュメントが存在しない場合は `false` を返す
       return false;
     } catch (error) {
-      console.error(`[ClientAdapter.js - hasChild] An error has occured.`);
-      throw err;
+      console.error(
+        `[ClientAdapter.js - hasChild] An error has occurred:`,
+        error
+      );
+      throw error;
     }
   }
 
   /**
-   * 現在のドキュメントIDに該当するドキュメントを削除します。
-   * - `logicalDelete`が指定されている場合、削除されたドキュメントは`archive`コレクションに移動されます。
-   * - `transaction`が指定されている場合は`deleteAsTransaction`を呼び出します。
-   * @param {function|null} transaction - トランザクション処理を行うための関数（省略可能、デフォルトは `null`）
-   * @param {function|null} callBack - サブクラス側で独自の処理を実行するための関数（省略可能、デフォルトは `null`）
-   * @returns {Promise<void>} - 処理が完了すると解決されるプロミス
-   * @throws {Error} - コールバックが関数でない場合にエラーをスローします。
-   * @throws {Error} - 自身にドキュメントIDが設定されていない場合にエラーをスローします。
-   * @throws {Error} - 削除対象のドキュメントが存在しない場合にエラーをスローします。（論理削除時のみ）
+   * Deletes the document corresponding to the current `docId`.
+   * - If `logicalDelete` is enabled, the document is moved to an archive collection instead of being permanently deleted.
+   * - If `transaction` is provided, the deletion is executed within it.
+   * - If `prefix` is provided, it will be used to resolve the collection path.
+   *
+   * 現在の `docId` に該当するドキュメントを削除します。
+   * - `logicalDelete` が true の場合、ドキュメントは物理削除されず、アーカイブコレクションに移動されます。
+   * - `transaction` が指定されている場合、その中で処理が実行されます。
+   * - `prefix` が指定されている場合、それを使ってコレクションパスを解決します。
+   *
+   * @param {Object} args - Parameters for deletion.
+   *                        削除処理のパラメータ。
+   * @param {Object|null} [args.transaction=null] - Firestore transaction object (optional).
+   *                                                Firestore のトランザクションオブジェクト（任意）。
+   * @param {function|null} [args.callBack=null] - Callback executed after deletion (optional).
+   *                                               削除後に実行されるコールバック関数（任意）。
+   * @param {string|null} [args.prefix=null] - Optional Firestore path prefix.
+   *                                           コレクションパスのプレフィックス（任意）。
+   * @returns {Promise<void>} Resolves when deletion is complete.
+   *                          削除が完了したら解決されるプロミス。
+   * @throws {Error} If `docId` is missing, `callBack` is not a function, or document is undeletable.
+   *                 `docId` が未設定、`callBack` が関数でない、または削除対象のドキュメントが存在しない場合。
    */
-  async delete({ transaction = null, callBack = null } = {}) {
-    // callBackがnull以外の場合は関数であることを確認
+  async delete({ transaction = null, callBack = null, prefix = null } = {}) {
     if (callBack !== null && typeof callBack !== "function") {
       throw new Error(`callBack must be a function.`);
     }
 
-    // docId が設定されていなければエラーをスロー
     if (!this.docId) {
       throw new Error(
         `The docId property is required for delete(). Call fetch() first.`
@@ -540,23 +592,18 @@ class ClientAdapter {
     try {
       await this.beforeDelete();
 
-      const collectionPath = this.constructor.getCollectionPath();
+      const collectionPath = this.constructor.getCollectionPath(prefix);
       const colRef = collection(ClientAdapter.firestore, collectionPath);
       const docRef = doc(colRef, this.docId);
 
-      /**
-       * delete 関数内で使用するトランザクション処理
-       * @param {Object} txn - Firestore のトランザクションオブジェクト
-       */
       const performTransaction = async (txn) => {
-        const hasChild = await this.hasChild(txn);
+        const hasChild = await this.hasChild({ transaction: txn, prefix });
         if (hasChild) {
           throw new Error(
             `Cannot delete because the associated document exists in the ${hasChild.collection} collection.`
           );
         }
 
-        // 論理削除区分が true の場合はドキュメントを archive に移動
         if (this.constructor.logicalDelete) {
           const sourceDocSnap = await txn.get(docRef);
           if (!sourceDocSnap.exists()) {
@@ -564,6 +611,7 @@ class ClientAdapter {
               `The document to be deleted did not exist. The document ID is ${this.docId}.`
             );
           }
+
           const sourceDocData = sourceDocSnap.data();
           const archiveColRef = collection(
             ClientAdapter.firestore,
@@ -573,60 +621,73 @@ class ClientAdapter {
           txn.set(archiveDocRef, sourceDocData);
         }
 
-        // 削除処理
         txn.delete(docRef);
 
-        // コールバックを実行
         if (callBack) await callBack(txn);
       };
 
-      // ドキュメントの削除処理
       if (transaction) {
         await performTransaction(transaction);
       } else {
         await runTransaction(ClientAdapter.firestore, performTransaction);
       }
     } catch (err) {
-      console.error(`[ClientAdapter.js - delete] An error has occured.`);
+      console.error(`[ClientAdapter.js - delete] An error has occurred.`);
       throw err;
     }
   }
 
   /**
-   * 削除されたドキュメントをアーカイブコレクションから元のコレクションに復元します。
-   * @param {string} docId - 復元するドキュメントのID
-   * @returns {Promise<DocumentReference>} - 復元されたドキュメントのリファレンス
-   * @throws {Error} - ドキュメントIDが指定されていない場合や、復元するドキュメントが存在しない場合にエラーをスローします
+   * Restores a deleted document from the archive collection to the original collection.
+   * - Uses `prefix` to resolve the Firestore collection path.
+   *
+   * アーカイブコレクションから削除されたドキュメントを元のコレクションに復元します。
+   * - `prefix` が指定されていれば、それに基づいてコレクションパスを解決します。
+   *
+   * @param {Object} args - Restore options.
+   * @param {string} args.docId - Document ID to restore.
+   * @param {string|null} [args.prefix=null] - Optional path prefix.
+   * @returns {Promise<DocumentReference>} Reference to the restored document.
+   * @throws {Error} If document is not found in the archive.
    */
-  async restore(docId) {
+  async restore({ docId, prefix = null }) {
     if (!docId) throw new Error(`docId is required.`);
+
     try {
-      const collectionPath = this.collectionPath;
+      const collectionPath = this.constructor.getCollectionPath(prefix);
       const archivePath = `${collectionPath}_archive`;
       const archiveColRef = collection(ClientAdapter.firestore, archivePath);
       const archiveDocRef = doc(archiveColRef, docId);
       const docSnapshot = await getDoc(archiveDocRef);
+
       if (!docSnapshot.exists()) {
         throw new Error(
-          `Specified document is not found at ${collectionPath} collection. docId: ${docId}`
+          `Specified document is not found at ${archivePath}. docId: ${docId}`
         );
       }
+
       const colRef = collection(ClientAdapter.firestore, collectionPath);
       const docRef = doc(colRef, docId);
       const batch = writeBatch(ClientAdapter.firestore);
       batch.delete(archiveDocRef);
       batch.set(docRef, docSnapshot.data());
       await batch.commit();
+
       return docRef;
     } catch (err) {
-      console.error(`[ClientAdapter.js - restore] An error has occured.`);
+      console.error(`[ClientAdapter.js - restore] An error has occurred.`);
       throw err;
     }
   }
 
   /**
-   * Firestoreのリアルタイムリスナーを解除します。
-   * 現在のリスナーが存在する場合、そのリスナーを解除します。
+   * Unsubscribes from the active Firestore real-time listener, if one exists.
+   * - Also clears the local document array (`this.docs`).
+   *
+   * Firestore のリアルタイムリスナーを解除します。
+   * - 現在のリスナーが存在する場合、それを解除します。
+   * - さらに、`this.docs` に格納されていたドキュメントデータもクリアします。
+   *
    * @returns {void}
    */
   unsubscribe() {
@@ -638,50 +699,57 @@ class ClientAdapter {
   }
 
   /**
-   * Firestoreのドキュメントに対するリアルタイムリスナーを設定し、
-   * 読み込んだドキュメントの内容で自身を初期化します。
-   * @param {string} docId - リアルタイムリスナーを設定するドキュメントのID
+   * Sets a real-time listener on a Firestore document and initializes the instance with its data.
+   * - If a listener already exists, it will be unsubscribed first.
+   *
+   * Firestore のドキュメントに対してリアルタイムリスナーを設定し、
+   * ドキュメントのデータでインスタンスを初期化します。
+   *
+   * @param {Object} args - Subscribe options.
+   * @param {string} args.docId - Document ID to subscribe to.
+   * @param {string|null} [args.prefix=null] - Optional path prefix.
    * @returns {void}
-   * @throws {Error} - ドキュメントIDが指定されていない場合にエラーをスローします
+   * @throws {Error} If docId is missing.
    */
-  subscribe(docId) {
+  subscribe({ docId, prefix = null }) {
     this.unsubscribe();
 
     if (!docId) throw new Error(`docId is required.`);
 
     try {
-      const collectionPath = this.constructor.getCollectionPath();
+      const collectionPath = this.constructor.getCollectionPath(prefix);
       const colRef = collection(ClientAdapter.firestore, collectionPath);
       const docRef = doc(colRef, docId);
       onSnapshot(docRef, (docSnapshot) => {
         this.initialize(docSnapshot.data());
       });
     } catch (err) {
-      console.error(`[ClientAdapter.js - subscribe] An error has occured.`);
+      console.error(`[ClientAdapter.js - subscribe] An error has occurred.`);
       throw err;
     }
   }
 
   /**
-   * Firestoreコレクションに対するリアルタイムリスナーを設定し、ドキュメントの変化を監視します。
-   * - 引数 constraints が文字列であった場合、tokenMap による N-gram 検索が実行されます。
-   *   追加の条件は options で指定可能です。
-   * - 引数 constraints が配列であった場合は配列内の各要素で指定された条件をもとにクエリを実行します。
+   * Sets a real-time listener on a Firestore collection and monitors changes.
+   * - If `constraints` is a string, performs N-gram search using `tokenMap`.
+   * - If `constraints` is an array, applies Firestore query conditions.
+   * - If `prefix` is provided, it is used to resolve the collection path.
    *
-   * @param {Array|string} constraints - クエリ条件の配列（新形式）または検索用の文字列
-   * @param {Array} options - 追加のクエリ条件の配列（constraints が配列の場合は無視されます。）
-   * @returns {Array<Object>} - リアルタイムで監視しているドキュメントのデータが格納された配列
-   * @throws {Error} 不明なクエリタイプが指定された場合
+   * Firestore コレクションに対してリアルタイムリスナーを設定し、
+   * ドキュメントの変更を監視します。
+   *
+   * @param {Object} args - Subscribe options.
+   * @param {Array|string} args.constraints - Query condition array or search string.
+   * @param {Array} [args.options=[]] - Additional query conditions.
+   * @param {string|null} [args.prefix=null] - Optional path prefix.
+   * @returns {Array<Object>} Live-updated document data.
    */
-  subscribeDocs(constraints = [], options = []) {
+  subscribeDocs({ constraints = [], options = [], prefix = null }) {
     this.unsubscribe();
     const queryConstraints = [];
 
-    // constraints の型に応じてクエリ条件を生成
     if (typeof constraints === "string") {
       queryConstraints.push(...this.createTokenMapQueries(constraints));
-
-      // options で指定されたクエリ条件を追加
       queryConstraints.push(...this.createQueries(options));
     } else if (Array.isArray(constraints)) {
       queryConstraints.push(...this.createQueries(constraints));
@@ -690,13 +758,13 @@ class ClientAdapter {
     }
 
     try {
-      // Firestoreコレクションに対してリアルタイムリスナーを設定
-      const collectionPath = this.constructor.getCollectionPath();
+      const collectionPath = this.constructor.getCollectionPath(prefix);
       const colRef = collection(
         ClientAdapter.firestore,
         collectionPath
       ).withConverter(this.constructor.converter());
       const queryRef = query(colRef, ...queryConstraints);
+
       this.listener = onSnapshot(queryRef, (snapshot) => {
         snapshot.docChanges().forEach((change) => {
           const item = change.doc.data();
@@ -708,9 +776,12 @@ class ClientAdapter {
           if (change.type === "removed") this.docs.splice(index, 1);
         });
       });
+
       return this.docs;
     } catch (err) {
-      console.error(`[ClientAdapter.js - subscribeDocs] An error has occured.`);
+      console.error(
+        `[ClientAdapter.js - subscribeDocs] An error has occurred.`
+      );
       throw err;
     }
   }
