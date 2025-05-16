@@ -720,7 +720,7 @@ class ClientAdapter {
       const collectionPath = this.constructor.getCollectionPath(prefix);
       const colRef = collection(ClientAdapter.firestore, collectionPath);
       const docRef = doc(colRef, docId);
-      onSnapshot(docRef, (docSnapshot) => {
+      this.listener = onSnapshot(docRef, (docSnapshot) => {
         this.initialize(docSnapshot.data());
       });
     } catch (err) {
