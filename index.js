@@ -28,6 +28,10 @@ class ClientAdapter {
     ClientAdapter.auth = getAuth();
   }
 
+  get type() {
+    return "CLIENT";
+  }
+
   /**
    * console を返します。
    * FireModel でコンソールを出力するために使用します。
