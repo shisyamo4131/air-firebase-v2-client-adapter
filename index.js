@@ -65,12 +65,13 @@ class ClientAdapter {
     }
 
     try {
-      const collectionPath = this.constructor.getCollectionPath(prefix);
-      const docRef = doc(
-        collection(ClientAdapter.firestore, "Autonumbers"),
-        collectionPath
-      );
-
+      let effectivePrefix =
+        prefix || this.constructor.getConfig()?.prefix || "";
+      if (effectivePrefix && !effectivePrefix.endsWith("/")) {
+        effectivePrefix += "/";
+      }
+      const collectionPath = effectivePrefix + "Autonumbers";
+      const docRef = doc(collection(ClientAdapter.firestore, collectionPath));
       const docSnap = await transaction.get(docRef);
       if (!docSnap.exists()) {
         throw new Error(
