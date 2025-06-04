@@ -531,17 +531,16 @@ class ClientAdapter {
       for (const item of this.constructor.hasMany) {
         const collectionPath =
           item.type === "collection" && prefix
-            ? `${prefix}/${item.collection}`.replace(/^\/|\/$/g, "")
-            : item.collection;
-
+            ? `${prefix}${item.collectionPath}`
+            : item.collectionPath;
         const colRef =
           item.type === "collection"
             ? collection(ClientAdapter.firestore, collectionPath)
-            : collectionGroup(ClientAdapter.firestore, item.collection);
-
+            : collectionGroup(ClientAdapter.firestore, item.collectionPath);
         const constraint = where(item.field, item.condition, this.docId);
         const queryRef = query(colRef, constraint, limit(1));
 
+        console.log(item.field, item.condition, this.docId);
         const snapshot = transaction
           ? await transaction.get(queryRef)
           : await getDocs(queryRef);
@@ -602,10 +601,14 @@ class ClientAdapter {
       const docRef = doc(colRef, this.docId);
 
       const performTransaction = async (txn) => {
-        const hasChild = await this.hasChild({ transaction: txn, prefix });
+        // const hasChild = await this.hasChild({ transaction: txn, prefix });
+        const hasChild = await this.hasChild({
+          transaction: txn,
+          prefix: prefix || this.constructor?.config?.prefix,
+        });
         if (hasChild) {
           throw new Error(
-            `Cannot delete because the associated document exists in the ${hasChild.collection} collection.`
+            `Cannot delete because the associated document exists in the ${hasChild.collectionPath} collection.`
           );
         }
 
