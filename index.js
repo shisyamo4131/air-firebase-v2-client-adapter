@@ -378,18 +378,16 @@ class ClientAdapter {
   }
 
   /**
-   * Fetches documents from Firestore based on query constraints.
-   * - If `constraints` is a string, performs N-gram search using `tokenMap`.
-   *   Additional filters can be applied via `options`.
-   * - If `constraints` is an array, standard Firestore queries are used.
-   * - Can be executed within a transaction.
-   * - If `prefix` is provided, it will be used to resolve the collection path.
-   *
    * クエリ条件に一致するドキュメントを Firestore から取得します。
    * - `constraints` が文字列なら N-gram 検索を実行します。
    * - 配列なら通常のクエリ検索を行います。
-   * - トランザクションを使用することも可能です。
    * - `prefix` が指定されている場合は、コレクションパスの解決に使用されます。
+   *
+   * [NOTE]
+   * - 2025/06/04 現在、transaction.get() に Query を指定すると以下のエラーが発生。
+   *   Cannot read properties of undefined (reading 'path')
+   *   原因が不明なため、`transaction` が指定されている場合は警告を出力するとともに
+   *   getDocs() を使った処理に差し替えることとする。
    *
    * @param {Object} args - Fetch options.
    * @param {Array|string} args.constraints - Query condition array or search string.
@@ -425,9 +423,17 @@ class ClientAdapter {
 
       const queryRef = query(colRef, ...queryConstraints);
 
-      const querySnapshot = transaction
-        ? await transaction.get(queryRef)
-        : await getDocs(queryRef);
+      let querySnapshot;
+
+      // do not use transaction.
+      if (transaction) {
+        console.warn(
+          "[ClientAdapter.js - fetchDocs] A transaction was provided, but transaction.get(Query) is known to cause an error. Falling back to getDocs(). This read operation will NOT be part of the transaction."
+        );
+        querySnapshot = await getDocs(queryRef);
+      } else {
+        querySnapshot = await getDocs(queryRef);
+      }
 
       return querySnapshot.docs.map((doc) => doc.data());
     } catch (err) {
@@ -514,6 +520,12 @@ class ClientAdapter {
    * `hasMany` 設定に基づいて、このドキュメントに従属する子ドキュメントが存在するかを確認します。
    * - コレクションタイプの定義に対しては `prefix` がパスに適用されます。
    *
+   * [NOTE]
+   * - 2025/06/04 現在、transaction.get() に Query を指定すると以下のエラーが発生。
+   *   Cannot read properties of undefined (reading 'path')
+   *   原因が不明なため、`transaction` が指定されている場合は警告を出力するとともに
+   *   getDocs() を使った処理に差し替えることとする。
+   *
    * @param {Object} args - Options for the check.
    * @param {Object|null} [args.transaction=null] - Firestore transaction object (optional).
    * @param {string|null} [args.prefix=null] - Optional path prefix for resolving collections.
@@ -540,10 +552,17 @@ class ClientAdapter {
         const constraint = where(item.field, item.condition, this.docId);
         const queryRef = query(colRef, constraint, limit(1));
 
-        console.log(item.field, item.condition, this.docId);
-        const snapshot = transaction
-          ? await transaction.get(queryRef)
-          : await getDocs(queryRef);
+        let snapshot;
+        if (transaction) {
+          // JSDocの[NOTE]に記載の通り、transaction.get(Query) はエラーが発生するため、
+          // getDocs() を使用します。この場合、読み取りはトランザクションの一部として実行されません。
+          console.warn(
+            "[ClientAdapter.js - hasChild] A transaction was provided, but transaction.get(Query) is known to cause an error. Falling back to getDocs(). This read operation will NOT be part of the transaction."
+          );
+          snapshot = await getDocs(queryRef);
+        } else {
+          snapshot = await getDocs(queryRef);
+        }
 
         if (!snapshot.empty) return item;
       }
