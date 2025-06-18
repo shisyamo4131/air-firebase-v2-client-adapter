@@ -154,6 +154,7 @@ class ClientAdapter {
 
     try {
       await this.beforeCreate();
+      await this.beforeEdit();
       this.validate();
 
       const performTransaction = async (txn) => {
@@ -484,6 +485,7 @@ class ClientAdapter {
 
     try {
       await this.beforeUpdate();
+      await this.beforeEdit();
       this.validate();
 
       const performTransaction = async (txn) => {
