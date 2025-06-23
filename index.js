@@ -747,7 +747,11 @@ class ClientAdapter {
 
     try {
       const collectionPath = this.constructor.getCollectionPath(prefix);
-      const colRef = collection(ClientAdapter.firestore, collectionPath);
+      // const colRef = collection(ClientAdapter.firestore, collectionPath);
+      const colRef = collection(
+        ClientAdapter.firestore,
+        collectionPath
+      ).withConverter(this.constructor.converter());
       const docRef = doc(colRef, docId);
       this.listener = onSnapshot(docRef, (docSnapshot) => {
         this.initialize(docSnapshot.data());
