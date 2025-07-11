@@ -41,6 +41,19 @@ class ClientAdapter {
   }
 
   /**
+   * Firestore インスタンスを返します。
+   * - 2025-07-11 added
+   */
+  get firestore() {
+    if (!ClientAdapter.firestore) {
+      throw new Error(
+        "Firestore is not initialized. Call ClientAdapter.init() first."
+      );
+    }
+    return ClientAdapter.firestore;
+  }
+
+  /**
    * Assigns an autonumber to the instance using a Firestore transaction.
    * - Retrieves the current autonumber doc from the `Autonumbers` collection.
    * - Increments the number and sets it on the instance.
