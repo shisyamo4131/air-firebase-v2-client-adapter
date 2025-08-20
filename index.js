@@ -72,7 +72,7 @@ class ClientAdapter {
    * @returns {Promise<Function>} Function that updates the current counter.
    * @throws {Error} If transaction is not provided or autonumber is invalid.
    */
-  async setAutonumber({ transaction, prefix = null }) {
+  async setAutonumber({ transaction, prefix = null } = {}) {
     if (!transaction) {
       throw new Error("transaction is required.");
     }
@@ -160,7 +160,7 @@ class ClientAdapter {
     transaction = null,
     callBack = null,
     prefix = null,
-  }) {
+  } = {}) {
     if (callBack !== null && typeof callBack !== "function") {
       throw new Error(`callBack must be a function.`);
     }
@@ -224,7 +224,7 @@ class ClientAdapter {
    * @returns {Promise<boolean>} `true` if document exists, `false` otherwise.
    * @throws {Error} If `docId` is missing or Firestore fetch fails.
    */
-  async fetch({ docId, transaction = null, prefix = null }) {
+  async fetch({ docId, transaction = null, prefix = null } = {}) {
     if (!docId) {
       throw new Error("docId is required.");
     }
@@ -268,7 +268,7 @@ class ClientAdapter {
    * @returns {Promise<Object|null>} Document data or `null` if not found.
    * @throws {Error} If `docId` is missing or Firestore fetch fails.
    */
-  async fetchDoc({ docId, transaction = null, prefix = null }) {
+  async fetchDoc({ docId, transaction = null, prefix = null } = {}) {
     if (!docId) throw new Error(`docId is required.`);
 
     try {
@@ -416,7 +416,7 @@ class ClientAdapter {
     options = [],
     transaction = null,
     prefix = null,
-  }) {
+  } = {}) {
     const queryConstraints = [];
 
     if (typeof constraints === "string") {
@@ -692,7 +692,7 @@ class ClientAdapter {
    * @returns {Promise<DocumentReference>} Reference to the restored document.
    * @throws {Error} If document is not found in the archive.
    */
-  async restore({ docId, prefix = null }) {
+  async restore({ docId, prefix = null } = {}) {
     if (!docId) throw new Error(`docId is required.`);
 
     try {
@@ -753,7 +753,7 @@ class ClientAdapter {
    * @returns {void}
    * @throws {Error} If docId is missing.
    */
-  subscribe({ docId, prefix = null }) {
+  subscribe({ docId, prefix = null } = {}) {
     this.unsubscribe();
 
     if (!docId) throw new Error(`docId is required.`);
@@ -790,7 +790,7 @@ class ClientAdapter {
    * @param {string|null} [args.prefix=null] - Optional path prefix.
    * @returns {Array<Object>} Live-updated document data.
    */
-  subscribeDocs({ constraints = [], options = [], prefix = null }) {
+  subscribeDocs({ constraints = [], options = [], prefix = null } = {}) {
     this.unsubscribe();
     const queryConstraints = [];
 
