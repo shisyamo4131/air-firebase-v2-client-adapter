@@ -460,6 +460,71 @@ class ClientAdapter {
   }
 
   /**
+   * 指定されたドキュメント ID の配列に該当するドキュメントを取得して返します。
+   * - `prefix` が指定されている場合は、コレクションパスの解決に使用されます。
+   *
+   * [NOTE]
+   * - 2025/06/04 現在、transaction.get() に Query を指定すると以下のエラーが発生。
+   *   Cannot read properties of undefined (reading 'path')
+   *   原因が不明なため、`transaction` が指定されている場合は警告を出力するとともに
+   *   getDocs() を使った処理に差し替えることとする。
+   *
+   * @param {Object} args - Fetch options.
+   * @param {Array<string>} args.ids - Document ID の配列。
+   * @param {Object|null} [args.transaction=null] - Firestore transaction (optional).
+   * @param {string|null} [args.prefix=null] - Optional Firestore path prefix.
+   * @returns {Promise<Array<Object>>} Array of document data.
+   */
+  async fetchDocsByIds({ ids = [], transaction = null, prefix = null } = {}) {
+    try {
+      if (!Array.isArray(ids) || ids.length === 0) return [];
+
+      const uniqueIds = Array.from(new Set(ids));
+      const chunkedIds = uniqueIds.flatMap((_, i, a) => {
+        return i % 30 ? [] : [a.slice(i, i + 30)];
+      });
+
+      const collectionPath = this.constructor.getCollectionPath(prefix);
+      const colRef = collection(
+        ClientAdapter.firestore,
+        collectionPath
+      ).withConverter(this.constructor.converter());
+
+      let querySnapshotArray;
+
+      // do not use transaction.
+      if (transaction) {
+        console.warn(
+          "[ClientAdapter.js - fetchDocsByIds] A transaction was provided, but transaction.get(Query) is known to cause an error. Falling back to getDocs(). This read operation will NOT be part of the transaction."
+        );
+        querySnapshotArray = await Promise.all(
+          chunkedIds.map((chunkedId) => {
+            const q = query(colRef, where("docId", "in", chunkedId));
+            return getDocs(q);
+          })
+        );
+      } else {
+        querySnapshotArray = await Promise.all(
+          chunkedIds.map((chunkedId) => {
+            const q = query(colRef, where("docId", "in", chunkedId));
+            return getDocs(q);
+          })
+        );
+      }
+
+      return querySnapshotArray.flatMap((snapshot) =>
+        snapshot.docs.map((doc) => doc.data())
+      );
+    } catch (err) {
+      console.error(
+        "[ClientAdapter.js - fetchDocsByIds] An error has occurred:",
+        err
+      );
+      throw err;
+    }
+  }
+
+  /**
    * Updates the Firestore document using the current instance data.
    * - Requires `this.docId` to be set (must call `fetch()` beforehand).
    * - Runs inside a transaction. If not provided, a new one will be created.
