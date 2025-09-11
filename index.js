@@ -149,7 +149,7 @@ class ClientAdapter {
    *                                               作成後に実行されるコールバック関数（任意）。
    * @param {string|null} [args.prefix=null] - Optional Firestore path prefix.
    *                                           コレクションパスのプレフィックス（任意）。
-   * @returns {Promise<DocumentReference|null>} A reference to the created document.
+   * @returns {Promise<DocumentReference>} A reference to the created document.
    *                                            作成されたドキュメントの参照。
    * @throws {Error} If `callBack` is not a function, or Firestore write fails.
    *                 `callBack` が関数でない、または Firestore 書き込みに失敗した場合にスローされます。
