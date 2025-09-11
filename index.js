@@ -170,28 +170,38 @@ class ClientAdapter {
       await this.beforeEdit();
       this.validate();
 
+      // transaction processing
       const performTransaction = async (txn) => {
+        // Get function to update autonumber if `useAutonumber` is true.
         const updateAutonumber =
           this.constructor.useAutonumber && useAutonumber
             ? await this.setAutonumber({ transaction: txn, prefix })
             : null;
 
+        // Prepare document reference
         const collectionPath = this.constructor.getCollectionPath(prefix);
         const colRef = collection(
           ClientAdapter.firestore,
           collectionPath
         ).withConverter(this.constructor.converter());
-
         const docRef = docId ? doc(colRef, docId) : doc(colRef);
 
+        // Set metadata
         this.docId = docRef.id;
         this.createdAt = new Date();
         this.updatedAt = new Date();
         this.uid = ClientAdapter.auth?.currentUser?.uid || "unknown";
 
+        // Create document
         txn.set(docRef, this);
+
+        // Update autonumber if applicable
         if (updateAutonumber) await updateAutonumber();
+
+        // Execute callback if provided
         if (callBack) await callBack(txn);
+
+        // Return document reference
         return docRef;
       };
 
