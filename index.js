@@ -16,6 +16,7 @@ import {
   writeBatch,
   onSnapshot,
   getFirestore,
+  increment as FieldValue_increment,
 } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
@@ -123,6 +124,56 @@ class ClientAdapter {
   }
 
   /**
+   * Returns a function to update the counter document in Firestore.
+   * - This function treats 'this' as a FireModel instance.
+   * @param {Object} args - Parameters for counter update.
+   * @param {Object} args.transaction - Firestore transaction object (required).
+   * @param {boolean} [args.increment=true] - Whether to increment (true) or decrement (false) the counter.
+   * @param {string|null} [args.prefix=null] - Optional path prefix for collection.
+   * @returns {Promise<Function>} Function to update the counter document.
+   */
+  async getCounterUpdater(args = {}) {
+    const { transaction, increment = true, prefix = null } = args;
+    // transaction is required
+    if (!transaction) {
+      throw new Error(
+        "[ClientAdapter - getCounterUpdater] transaction is required."
+      );
+    }
+
+    // Get collection path defined by class.
+    // -> `getCollectionPath()` is a static method defined in FireModel.
+    // ex) `customers` or `companies/{companyId}/customers`
+    const collectionPath = this.constructor.getCollectionPath(prefix);
+
+    // Divide collection path into segments.
+    // ex) `["companies", "{companyId}", "customers"]`
+    const segments = collectionPath.split("/");
+
+    // Determine effective collection path for counter-document.
+    let effectiveDocPath = "";
+    if (segments.length === 1) {
+      // ex) `customers` -> `meta/customers`
+      effectiveDocPath = `meta/${segments[0]}`;
+    } else {
+      // ex) `["companies", "{companyId}", "customers"]` -> `companies/{companyId}/meta/customers`
+      const col = segments.pop(); // Remove last segment (current collection name)
+      effectiveDocPath = `${segments.join("/")}/meta/${col}`;
+    }
+    // const colRef = collection(ClientAdapter.firestore, effectiveCollectionPath);
+    const docRef = doc(ClientAdapter.firestore, effectiveDocPath);
+    const docSnap = await transaction.get(docRef);
+    if (!docSnap.exists()) {
+      return () => transaction.set(docRef, { docCount: increment ? 1 : 0 });
+    } else {
+      return () =>
+        transaction.update(docRef, {
+          docCount: FieldValue_increment(increment ? 1 : -1),
+        });
+    }
+  }
+
+  /**
    * Creates a document in Firestore.
    * - Always runs inside a Firestore transaction. If not provided, a new transaction is created.
    * - If `docId` is not specified, Firestore will auto-generate one.
@@ -178,6 +229,14 @@ class ClientAdapter {
             ? await this.setAutonumber({ transaction: txn, prefix })
             : null;
 
+        // Get function to update counter document.
+        const adapter = this.constructor.getAdapter();
+        const counterUpdater = await adapter.getCounterUpdater.bind(this)({
+          transaction: txn,
+          increment: true,
+          prefix,
+        });
+
         // Prepare document reference
         const collectionPath = this.constructor.getCollectionPath(prefix);
         const colRef = collection(
@@ -197,6 +256,8 @@ class ClientAdapter {
 
         // Update autonumber if applicable
         if (updateAutonumber) await updateAutonumber();
+
+        if (counterUpdater) await counterUpdater();
 
         // Execute callback if provided
         if (callBack) await callBack(txn);
@@ -710,7 +771,8 @@ class ClientAdapter {
       const docRef = doc(colRef, this.docId);
 
       const performTransaction = async (txn) => {
-        // const hasChild = await this.hasChild({ transaction: txn, prefix });
+        // Check for child documents before deletion
+        // If child documents exist, throw an error to prevent deletion
         const hasChild = await this.hasChild({
           transaction: txn,
           prefix: prefix || this.constructor?.config?.prefix,
@@ -721,7 +783,19 @@ class ClientAdapter {
           );
         }
 
+        // Get function to update counter document.
+        const adapter = this.constructor.getAdapter();
+        const counterUpdater = await adapter.getCounterUpdater.bind(this)({
+          transaction: txn,
+          increment: false,
+          prefix,
+        });
+
+        // If logicalDelete is enabled, archive the document before deletion
         if (this.constructor.logicalDelete) {
+          // Fetch the document to be deleted
+          // This is necessary because in a transaction, docRef.get() cannot be used directly
+          // and we need to ensure the document exists before archiving
           const sourceDocSnap = await txn.get(docRef);
           if (!sourceDocSnap.exists()) {
             throw new Error(
@@ -739,6 +813,8 @@ class ClientAdapter {
         }
 
         txn.delete(docRef);
+
+        if (counterUpdater) await counterUpdater();
 
         if (callBack) await callBack(txn);
       };
@@ -767,30 +843,67 @@ class ClientAdapter {
    * @returns {Promise<DocumentReference>} Reference to the restored document.
    * @throws {Error} If document is not found in the archive.
    */
-  async restore({ docId, prefix = null } = {}) {
-    if (!docId) throw new Error(`docId is required.`);
-
+  async restore({ docId, prefix = null, transaction = null } = {}) {
     try {
-      const collectionPath = this.constructor.getCollectionPath(prefix);
-      const archivePath = `${collectionPath}_archive`;
-      const archiveColRef = collection(ClientAdapter.firestore, archivePath);
-      const archiveDocRef = doc(archiveColRef, docId);
-      const docSnapshot = await getDoc(archiveDocRef);
+      if (!docId) throw new Error(`docId is required.`);
+      const performTransaction = async (txn) => {
+        const collectionPath = this.constructor.getCollectionPath(prefix);
+        const archivePath = `${collectionPath}_archive`;
+        const archiveColRef = collection(ClientAdapter.firestore, archivePath);
+        const archiveDocRef = doc(archiveColRef, docId);
+        const docSnapshot = await txn.get(archiveDocRef);
+        if (!docSnapshot.exists()) {
+          throw new Error(
+            `Specified document is not found at ${archivePath}. docId: ${docId}`
+          );
+        }
 
-      if (!docSnapshot.exists()) {
-        throw new Error(
-          `Specified document is not found at ${archivePath}. docId: ${docId}`
+        // Get function to update counter document.
+        const adapter = this.constructor.getAdapter();
+        const counterUpdater = await adapter.getCounterUpdater.bind(this)({
+          transaction: txn,
+          increment: true,
+          prefix,
+        });
+
+        const colRef = collection(ClientAdapter.firestore, collectionPath);
+        const docRef = doc(colRef, docId);
+        txn.delete(archiveDocRef);
+        txn.set(docRef, docSnapshot.data());
+
+        if (counterUpdater) await counterUpdater();
+
+        return docRef;
+      };
+
+      if (transaction) {
+        return await performTransaction(transaction);
+      } else {
+        return await runTransaction(
+          ClientAdapter.firestore,
+          performTransaction
         );
       }
+      // const collectionPath = this.constructor.getCollectionPath(prefix);
+      // const archivePath = `${collectionPath}_archive`;
+      // const archiveColRef = collection(ClientAdapter.firestore, archivePath);
+      // const archiveDocRef = doc(archiveColRef, docId);
+      // const docSnapshot = await getDoc(archiveDocRef);
 
-      const colRef = collection(ClientAdapter.firestore, collectionPath);
-      const docRef = doc(colRef, docId);
-      const batch = writeBatch(ClientAdapter.firestore);
-      batch.delete(archiveDocRef);
-      batch.set(docRef, docSnapshot.data());
-      await batch.commit();
+      // if (!docSnapshot.exists()) {
+      //   throw new Error(
+      //     `Specified document is not found at ${archivePath}. docId: ${docId}`
+      //   );
+      // }
 
-      return docRef;
+      // const colRef = collection(ClientAdapter.firestore, collectionPath);
+      // const docRef = doc(colRef, docId);
+      // const batch = writeBatch(ClientAdapter.firestore);
+      // batch.delete(archiveDocRef);
+      // batch.set(docRef, docSnapshot.data());
+      // await batch.commit();
+
+      // return docRef;
     } catch (err) {
       console.error(`[ClientAdapter.js - restore] An error has occurred.`);
       throw err;
