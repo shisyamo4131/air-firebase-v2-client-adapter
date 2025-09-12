@@ -149,25 +149,19 @@ class ClientAdapter {
     // ex) `["companies", "{companyId}", "customers"]`
     const segments = collectionPath.split("/");
 
+    // Get collection name (Last segment is collection name)
+    const colName = segments.pop();
+
     // Determine effective collection path for counter-document.
-    let effectiveDocPath = "";
-    if (segments.length === 1) {
-      // ex) `customers` -> `meta/customers`
-      effectiveDocPath = `meta/${segments[0]}`;
-    } else {
-      // ex) `["companies", "{companyId}", "customers"]` -> `companies/{companyId}/meta/customers`
-      const col = segments.pop(); // Remove last segment (current collection name)
-      effectiveDocPath = `${segments.join("/")}/meta/${col}`;
-    }
-    // const colRef = collection(ClientAdapter.firestore, effectiveCollectionPath);
+    const effectiveDocPath = `${segments.join("/")}/meta/docCounter`;
     const docRef = doc(ClientAdapter.firestore, effectiveDocPath);
     const docSnap = await transaction.get(docRef);
     if (!docSnap.exists()) {
-      return () => transaction.set(docRef, { docCount: increment ? 1 : 0 });
+      return () => transaction.set(docRef, { [colName]: increment ? 1 : 0 });
     } else {
       return () =>
         transaction.update(docRef, {
-          docCount: FieldValue_increment(increment ? 1 : -1),
+          [colName]: FieldValue_increment(increment ? 1 : -1),
         });
     }
   }
@@ -188,7 +182,7 @@ class ClientAdapter {
 
     try {
       // `callBack` must be a function if provided.
-      if (callBack !== null && typeof callBack !== "function") {
+      if (callBack && typeof callBack !== "function") {
         throw new Error(
           `[ClientAdapter.js - create] callBack must be a function.`
         );
