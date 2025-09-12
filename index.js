@@ -884,26 +884,6 @@ class ClientAdapter {
           performTransaction
         );
       }
-      // const collectionPath = this.constructor.getCollectionPath(prefix);
-      // const archivePath = `${collectionPath}_archive`;
-      // const archiveColRef = collection(ClientAdapter.firestore, archivePath);
-      // const archiveDocRef = doc(archiveColRef, docId);
-      // const docSnapshot = await getDoc(archiveDocRef);
-
-      // if (!docSnapshot.exists()) {
-      //   throw new Error(
-      //     `Specified document is not found at ${archivePath}. docId: ${docId}`
-      //   );
-      // }
-
-      // const colRef = collection(ClientAdapter.firestore, collectionPath);
-      // const docRef = doc(colRef, docId);
-      // const batch = writeBatch(ClientAdapter.firestore);
-      // batch.delete(archiveDocRef);
-      // batch.set(docRef, docSnapshot.data());
-      // await batch.commit();
-
-      // return docRef;
     } catch (err) {
       console.error(`[ClientAdapter.js - restore] An error has occurred.`);
       throw err;
