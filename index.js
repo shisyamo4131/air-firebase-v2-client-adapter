@@ -927,9 +927,15 @@ class ClientAdapter {
    * @param {Array|string} args.constraints - Query condition array or search string.
    * @param {Array} [args.options=[]] - Additional query conditions.
    * @param {string|null} [args.prefix=null] - Optional path prefix.
+   * @param {function|null} [args.callback=null] - Callback executed on document changes.
    * @returns {Array<Object>} Live-updated document data.
    */
-  subscribeDocs({ constraints = [], options = [], prefix = null } = {}) {
+  subscribeDocs({
+    constraints = [],
+    options = [],
+    prefix = null,
+    callback,
+  } = {}) {
     this.unsubscribe();
     const queryConstraints = [];
 
@@ -959,6 +965,7 @@ class ClientAdapter {
           if (change.type === "added") this.docs.push(item);
           if (change.type === "modified") this.docs.splice(index, 1, item);
           if (change.type === "removed") this.docs.splice(index, 1);
+          if (callback) callback(item, change.type);
         });
       });
 
