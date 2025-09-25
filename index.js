@@ -630,7 +630,7 @@ class ClientAdapter {
 
       return docRef;
     } catch (err) {
-      console.error(`[ClientAdapter.js - update] An error has occurred.`);
+      console.error(`[ClientAdapter.js - update] ${err.message}`);
       throw err;
     }
   }
