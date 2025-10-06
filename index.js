@@ -18,7 +18,13 @@ import {
   increment as FieldValue_increment,
 } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
+import { ClientAdapterError, ERRORS } from "./error.js";
 
+/*****************************************************************************
+ * Client Adapter for FireModel version 1.0.0
+ *
+ * - This adapter is designed for client-side applications using Firebase.
+ *****************************************************************************/
 class ClientAdapter {
   static firestore = null;
   static auth = null;
@@ -41,16 +47,27 @@ class ClientAdapter {
   }
 
   /**
-   * Firestore インスタンスを返します。
+   * Returns the Firestore instance.
    * - 2025-07-11 added
    */
   get firestore() {
     if (!ClientAdapter.firestore) {
-      throw new Error(
-        "Firestore is not initialized. Call ClientAdapter.init() first."
-      );
+      throw new ClientAdapterError(ERRORS.SYSTEM_FIRESTORE_NOT_INITIALIZED);
     }
     return ClientAdapter.firestore;
+  }
+
+  /**
+   * Outputs an error message to the console.
+   * - Use this method only for unexpected errors.
+   * @param {string} funcName
+   * @param {Error} err - The error object to log.
+   */
+  _outputErrorConsole(funcName, err) {
+    console.error(
+      `[ClientAdapter.js - ${funcName}] Unknown error has occurred:`,
+      err
+    );
   }
 
   /**
@@ -59,13 +76,6 @@ class ClientAdapter {
    * - Increments the number and sets it on the instance.
    * - Returns a function to update the `current` value in Firestore.
    * - `prefix` is used to resolve the collection path if provided.
-   *
-   * Firestore のトランザクションを使用して、インスタンスに採番を行います。
-   * - `Autonumbers` コレクションから現在の採番情報を取得します。
-   * - 採番値をインクリメントし、インスタンスに設定します。
-   * - `current` 値を更新する関数を返します（呼び出し元で実行）。
-   * - `prefix` が指定されている場合は、コレクションパスの解決に使用されます。
-   *
    * @param {Object} args - Autonumber options.
    * @param {Object} args.transaction - Firestore transaction object (required).
    * @param {string|null} [args.prefix=null] - Optional path prefix.
@@ -74,7 +84,7 @@ class ClientAdapter {
    */
   async setAutonumber({ transaction, prefix = null } = {}) {
     if (!transaction) {
-      throw new Error("transaction is required.");
+      throw new ClientAdapterError(ERRORS.VALIDATION_MISSING_TRANSACTION);
     }
 
     try {
@@ -87,26 +97,22 @@ class ClientAdapter {
       const docRef = doc(collection(ClientAdapter.firestore, collectionPath));
       const docSnap = await transaction.get(docRef);
       if (!docSnap.exists()) {
-        throw new Error(
-          `Could not find Autonumber document. collection: ${collectionPath}`
+        throw new ClientAdapterError(
+          ERRORS.BUSINESS_AUTONUMBER_DOCUMENT_NOT_FOUND
         );
       }
 
       const data = docSnap.data();
 
       if (!data?.status) {
-        throw new Error(
-          `Autonumber is disabled. collection: ${collectionPath}`
-        );
+        throw new ClientAdapterError(ERRORS.BUSINESS_AUTONUMBER_DISABLED);
       }
 
       const newNumber = data.current + 1;
       const length = data.length;
       const maxValue = Math.pow(10, length) - 1;
       if (newNumber > maxValue) {
-        throw new Error(
-          `The maximum value for Autonumber has been reached. collection: ${collectionPath}`
-        );
+        throw new ClientAdapterError(ERRORS.BUSINESS_AUTONUMBER_MAX_REACHED);
       }
 
       const newCode = String(newNumber).padStart(length, "0");
@@ -114,11 +120,12 @@ class ClientAdapter {
 
       return () => transaction.update(docRef, { current: newNumber });
     } catch (err) {
-      console.error(
-        `[ClientAdapter.js - setAutonumber] An error has occurred:`,
-        err
-      );
-      throw err;
+      if (err instanceof ClientAdapterError) {
+        throw err;
+      } else {
+        this._outputErrorConsole("setAutonumber", err);
+        throw new ClientAdapterError(ERRORS.SYSTEM_UNKNOWN_ERROR);
+      }
     }
   }
 
@@ -135,34 +142,41 @@ class ClientAdapter {
     const { transaction, increment = true, prefix = null } = args;
     // transaction is required
     if (!transaction) {
-      throw new Error(
-        "[ClientAdapter - getCounterUpdater] transaction is required."
-      );
+      throw new ClientAdapterError(ERRORS.VALIDATION_MISSING_TRANSACTION);
     }
 
-    // Get collection path defined by class.
-    // -> `getCollectionPath()` is a static method defined in FireModel.
-    // ex) `customers` or `companies/{companyId}/customers`
-    const collectionPath = this.constructor.getCollectionPath(prefix);
+    try {
+      // Get collection path defined by class.
+      // -> `getCollectionPath()` is a static method defined in FireModel.
+      // ex) `customers` or `companies/{companyId}/customers`
+      const collectionPath = this.constructor.getCollectionPath(prefix);
 
-    // Divide collection path into segments.
-    // ex) `["companies", "{companyId}", "customers"]`
-    const segments = collectionPath.split("/");
+      // Divide collection path into segments.
+      // ex) `["companies", "{companyId}", "customers"]`
+      const segments = collectionPath.split("/");
 
-    // Get collection name (Last segment is collection name)
-    const colName = segments.pop();
+      // Get collection name (Last segment is collection name)
+      const colName = segments.pop();
 
-    // Determine effective collection path for counter-document.
-    const effectiveDocPath = `${segments.join("/")}/meta/docCounter`;
-    const docRef = doc(ClientAdapter.firestore, effectiveDocPath);
-    const docSnap = await transaction.get(docRef);
-    if (!docSnap.exists()) {
-      return () => transaction.set(docRef, { [colName]: increment ? 1 : 0 });
-    } else {
-      return () =>
-        transaction.update(docRef, {
-          [colName]: FieldValue_increment(increment ? 1 : -1),
-        });
+      // Determine effective collection path for counter-document.
+      const effectiveDocPath = `${segments.join("/")}/meta/docCounter`;
+      const docRef = doc(ClientAdapter.firestore, effectiveDocPath);
+      const docSnap = await transaction.get(docRef);
+      if (!docSnap.exists()) {
+        return () => transaction.set(docRef, { [colName]: increment ? 1 : 0 });
+      } else {
+        return () =>
+          transaction.update(docRef, {
+            [colName]: FieldValue_increment(increment ? 1 : -1),
+          });
+      }
+    } catch (err) {
+      if (err instanceof ClientAdapterError) {
+        throw err;
+      } else {
+        this._outputErrorConsole("getCounterUpdater", err);
+        throw new ClientAdapterError(ERRORS.SYSTEM_UNKNOWN_ERROR);
+      }
     }
   }
 
@@ -180,14 +194,12 @@ class ClientAdapter {
   async create(args = {}) {
     const { docId, useAutonumber = true, transaction, callBack, prefix } = args;
 
-    try {
-      // `callBack` must be a function if provided.
-      if (callBack && typeof callBack !== "function") {
-        throw new Error(
-          `[ClientAdapter.js - create] callBack must be a function.`
-        );
-      }
+    // `callBack` must be a function if provided.
+    if (callBack && typeof callBack !== "function") {
+      throw new ClientAdapterError(ERRORS.VALIDATION_INVALID_CALLBACK);
+    }
 
+    try {
       // Pre-create hooks and validation
       await this.beforeCreate();
       await this.beforeEdit();
@@ -245,8 +257,12 @@ class ClientAdapter {
 
       return docRef;
     } catch (err) {
-      console.error(`[ClientAdapter.js - create] An error has occurred.`, err);
-      throw err;
+      if (err instanceof ClientAdapterError) {
+        throw err;
+      } else {
+        this._outputErrorConsole("create", err);
+        throw new ClientAdapterError(ERRORS.SYSTEM_UNKNOWN_ERROR);
+      }
     }
   }
 
@@ -262,11 +278,10 @@ class ClientAdapter {
    */
   async fetch(args = {}) {
     const { docId, transaction = null, prefix = null } = args;
+    if (!docId) {
+      throw new ClientAdapterError(ERRORS.VALIDATION_MISSING_DOC_ID);
+    }
     try {
-      if (!docId) {
-        throw new Error("[ClientAdapter.js - fetch] docId is required.");
-      }
-
       // Get collection path defined by FireModel.
       const collectionPath = this.constructor.getCollectionPath(prefix);
 
@@ -287,8 +302,12 @@ class ClientAdapter {
 
       return docSnap.exists();
     } catch (err) {
-      console.error("[ClientAdapter.js - fetch] An error has occurred:", err);
-      throw err;
+      if (err instanceof ClientAdapterError) {
+        throw err;
+      } else {
+        this._outputErrorConsole("fetch", err);
+        throw new ClientAdapterError(ERRORS.SYSTEM_UNKNOWN_ERROR);
+      }
     }
   }
 
@@ -303,12 +322,11 @@ class ClientAdapter {
    */
   async fetchDoc(args = {}) {
     const { docId, transaction = null, prefix = null } = args;
+    // Throw error if docId is not provided.
+    if (!docId) {
+      throw new ClientAdapterError(ERRORS.VALIDATION_MISSING_DOC_ID);
+    }
     try {
-      // Throw error if docId is not provided.
-      if (!docId) {
-        throw new Error("[ClientAdapter.js - fetchDoc] 'docId' is required.");
-      }
-
       // Get collection path defined by FireModel.
       const collectionPath = this.constructor.getCollectionPath(prefix);
 
@@ -326,11 +344,12 @@ class ClientAdapter {
 
       return docSnap.exists() ? docSnap.data() : null;
     } catch (err) {
-      console.error(
-        "[ClientAdapter.js - fetchDoc] An error has occurred:",
-        err
-      );
-      throw err;
+      if (err instanceof ClientAdapterError) {
+        throw err;
+      } else {
+        this._outputErrorConsole("fetchDoc", err);
+        throw new ClientAdapterError(ERRORS.SYSTEM_UNKNOWN_ERROR);
+      }
     }
   }
 
@@ -346,8 +365,6 @@ class ClientAdapter {
    */
   createQueries(constraints) {
     const result = [];
-    const validQueryTypes = ["where", "orderBy", "limit"];
-
     constraints.forEach((constraint) => {
       const [type, ...args] = constraint;
 
@@ -357,38 +374,20 @@ class ClientAdapter {
           break;
         case "orderBy":
           if (!["asc", "desc"].includes(args[1] || "asc")) {
-            console.error(
-              "[ClientAdapter.js - createQueries] Invalid orderBy direction:",
-              args[1]
-            );
-            throw new Error(
-              `Invalid orderBy direction: ${args[1]}. Use "asc" or "desc".`
+            throw new ClientAdapterError(
+              ERRORS.VALIDATION_INVALID_ORDERBY_DIRECTION
             );
           }
           result.push(orderBy(args[0], args[1] || "asc"));
           break;
         case "limit":
           if (typeof args[0] !== "number" || args[0] <= 0) {
-            console.error(
-              "[ClientAdapter.js - createQueries] Invalid limit value:",
-              args[0]
-            );
-            throw new Error(
-              `Invalid limit value: ${args[0]}. Must be a positive number.`
-            );
+            throw new ClientAdapterError(ERRORS.VALIDATION_INVALID_LIMIT);
           }
           result.push(limit(args[0]));
           break;
         default:
-          console.error(
-            "[ClientAdapter.js - createQueries] Invalid query type:",
-            type
-          );
-          throw new Error(
-            `Invalid query type: ${type}. Please use one of: ${validQueryTypes.join(
-              ", "
-            )}`
-          );
+          throw new ClientAdapterError(ERRORS.VALIDATION_INVALID_QUERY_TYPE);
       }
     });
     return result;
@@ -406,7 +405,7 @@ class ClientAdapter {
    */
   createTokenMapQueries(constraints) {
     if (!constraints || constraints.trim().length === 0) {
-      throw new Error("Search string (constraints) cannot be empty.");
+      throw new ClientAdapterError(ERRORS.VALIDATION_INVALID_CONSTRAINTS);
     }
 
     const result = new Set(); // クエリの重複を防ぐために `Set` を使用
@@ -440,10 +439,12 @@ class ClientAdapter {
    * - `prefix` が指定されている場合は、コレクションパスの解決に使用されます。
    *
    * [NOTE]
-   * - 2025/06/04 現在、transaction.get() に Query を指定すると以下のエラーが発生。
-   *   Cannot read properties of undefined (reading 'path')
-   *   原因が不明なため、`transaction` が指定されている場合は警告を出力するとともに
-   *   getDocs() を使った処理に差し替えることとする。
+   * - 2025/10/06 現在、transaction.get() に Query を指定することはできない仕様。
+   *   そのため、依存ドキュメントの存在確認には getDocs() を使用することになるが、
+   *   transaction 内での読み取りにならず、当該処理の直後に他のプロセスから依存ドキュメントが
+   *   追加された場合に整合性を失う可能性あり。
+   *   引数 transaction が本来であれば不要だが、将来的に transaction.get() が
+   *   Query に対応した場合に備えて引数として受け取る形にしておく。
    *
    * @param {Object} args - Fetch options.
    * @param {Array|string} args.constraints - Query condition array or search string.
@@ -467,7 +468,7 @@ class ClientAdapter {
     } else if (Array.isArray(constraints)) {
       queryConstraints.push(...this.createQueries(constraints));
     } else {
-      throw new Error(`constraints must be a string or array.`);
+      throw new ClientAdapterError(ERRORS.VALIDATION_INVALID_CONSTRAINTS);
     }
 
     try {
@@ -479,25 +480,22 @@ class ClientAdapter {
 
       const queryRef = query(colRef, ...queryConstraints);
 
-      let querySnapshot;
+      /** transaction.get() が Query に対応した場合は以下をコメントアウト */
+      const querySnapshot = await getDocs(queryRef);
 
-      // do not use transaction.
-      if (transaction) {
-        console.warn(
-          "[ClientAdapter.js - fetchDocs] A transaction was provided, but transaction.get(Query) is known to cause an error. Falling back to getDocs(). This read operation will NOT be part of the transaction."
-        );
-        querySnapshot = await getDocs(queryRef);
-      } else {
-        querySnapshot = await getDocs(queryRef);
-      }
+      /** transaction.get() が Query に対応した場合は以下を使用 */
+      // const querySnapshot = transaction
+      //   ? await transaction.get(queryRef)
+      //   : await getDocs(queryRef);
 
       return querySnapshot.docs.map((doc) => doc.data());
     } catch (err) {
-      console.error(
-        "[ClientAdapter.js - fetchDocs] An error has occurred:",
-        err
-      );
-      throw err;
+      if (err instanceof ClientAdapterError) {
+        throw err;
+      } else {
+        this._outputErrorConsole("fetchDocs", err);
+        throw new ClientAdapterError(ERRORS.SYSTEM_UNKNOWN_ERROR);
+      }
     }
   }
 
@@ -506,10 +504,12 @@ class ClientAdapter {
    * - `prefix` が指定されている場合は、コレクションパスの解決に使用されます。
    *
    * [NOTE]
-   * - 2025/06/04 現在、transaction.get() に Query を指定すると以下のエラーが発生。
-   *   Cannot read properties of undefined (reading 'path')
-   *   原因が不明なため、`transaction` が指定されている場合は警告を出力するとともに
-   *   getDocs() を使った処理に差し替えることとする。
+   * - 2025/10/06 現在、transaction.get() に Query を指定することはできない仕様。
+   *   そのため、依存ドキュメントの存在確認には getDocs() を使用することになるが、
+   *   transaction 内での読み取りにならず、当該処理の直後に他のプロセスから依存ドキュメントが
+   *   追加された場合に整合性を失う可能性あり。
+   *   引数 transaction が本来であれば不要だが、将来的に transaction.get() が
+   *   Query に対応した場合に備えて引数として受け取る形にしておく。
    *
    * @param {Object} args - Fetch options.
    * @param {Array<string>} args.ids - Document ID の配列。
@@ -532,37 +532,25 @@ class ClientAdapter {
         collectionPath
       ).withConverter(this.constructor.converter());
 
-      let querySnapshotArray;
-
-      // do not use transaction.
-      if (transaction) {
-        console.warn(
-          "[ClientAdapter.js - fetchDocsByIds] A transaction was provided, but transaction.get(Query) is known to cause an error. Falling back to getDocs(). This read operation will NOT be part of the transaction."
-        );
-        querySnapshotArray = await Promise.all(
-          chunkedIds.map((chunkedId) => {
-            const q = query(colRef, where("docId", "in", chunkedId));
-            return getDocs(q);
-          })
-        );
-      } else {
-        querySnapshotArray = await Promise.all(
-          chunkedIds.map((chunkedId) => {
-            const q = query(colRef, where("docId", "in", chunkedId));
-            return getDocs(q);
-          })
-        );
-      }
+      const querySnapshotArray = await Promise.all(
+        chunkedIds.map((chunkedId) => {
+          const q = query(colRef, where("docId", "in", chunkedId));
+          return getDocs(q);
+          /** transaction.get() が Query に対応した場合は以下を使用 */
+          // return transaction ? transaction.get(q) : getDocs(q);
+        })
+      );
 
       return querySnapshotArray.flatMap((snapshot) =>
         snapshot.docs.map((doc) => doc.data())
       );
     } catch (err) {
-      console.error(
-        "[ClientAdapter.js - fetchDocsByIds] An error has occurred:",
-        err
-      );
-      throw err;
+      if (err instanceof ClientAdapterError) {
+        throw err;
+      } else {
+        this._outputErrorConsole("fetchDocsByIds", err);
+        throw new ClientAdapterError(ERRORS.SYSTEM_UNKNOWN_ERROR);
+      }
     }
   }
 
@@ -594,13 +582,11 @@ class ClientAdapter {
    */
   async update({ transaction = null, callBack = null, prefix = null } = {}) {
     if (callBack !== null && typeof callBack !== "function") {
-      throw new Error(`callBack must be a function.`);
+      throw new ClientAdapterError(ERRORS.VALIDATION_INVALID_CALLBACK);
     }
 
     if (!this.docId) {
-      throw new Error(
-        `The docId property is required for update(). Call fetch() first.`
-      );
+      throw new ClientAdapterError(ERRORS.VALIDATION_MISSING_DOC_ID);
     }
 
     try {
@@ -630,8 +616,12 @@ class ClientAdapter {
 
       return docRef;
     } catch (err) {
-      console.error(`[ClientAdapter.js - update] ${err.message}`);
-      throw err;
+      if (err instanceof ClientAdapterError) {
+        throw err;
+      } else {
+        this._outputErrorConsole("update", err);
+        throw new ClientAdapterError(ERRORS.SYSTEM_UNKNOWN_ERROR);
+      }
     }
   }
 
@@ -656,9 +646,7 @@ class ClientAdapter {
   async hasChild({ transaction = null, prefix = null } = {}) {
     try {
       if (!this.docId) {
-        throw new Error(
-          `The docId property is required for delete(). Call fetch() first.`
-        );
+        throw new ClientAdapterError(ERRORS.VALIDATION_MISSING_DOC_ID);
       }
 
       for (const item of this.constructor.hasMany) {
@@ -685,9 +673,13 @@ class ClientAdapter {
       }
 
       return false;
-    } catch (error) {
-      console.error(`[ClientAdapter.js - hasChild] ${error.message}`, error);
-      throw error;
+    } catch (err) {
+      if (err instanceof ClientAdapterError) {
+        throw err;
+      } else {
+        this._outputErrorConsole("hasChild", err);
+        throw new ClientAdapterError(ERRORS.SYSTEM_UNKNOWN_ERROR);
+      }
     }
   }
 
@@ -717,13 +709,11 @@ class ClientAdapter {
    */
   async delete({ transaction = null, callBack = null, prefix = null } = {}) {
     if (callBack !== null && typeof callBack !== "function") {
-      throw new Error(`callBack must be a function.`);
+      throw new ClientAdapterError(ERRORS.VALIDATION_INVALID_CALLBACK);
     }
 
     if (!this.docId) {
-      throw new Error(
-        `The docId property is required for delete(). Call fetch() first.`
-      );
+      throw new ClientAdapterError(ERRORS.VALIDATION_MISSING_DOC_ID);
     }
 
     try {
@@ -741,9 +731,7 @@ class ClientAdapter {
           prefix: prefix || this.constructor?.config?.prefix,
         });
         if (hasChild) {
-          throw new Error(
-            `Cannot delete because the associated document exists in the ${hasChild.collectionPath} collection.`
-          );
+          throw new ClientAdapterError(ERRORS.BUSINESS_CHILD_DOCUMENTS_EXIST);
         }
 
         // Get function to update counter document.
@@ -761,9 +749,7 @@ class ClientAdapter {
           // and we need to ensure the document exists before archiving
           const sourceDocSnap = await txn.get(docRef);
           if (!sourceDocSnap.exists()) {
-            throw new Error(
-              `The document to be deleted did not exist. The document ID is ${this.docId}.`
-            );
+            throw new ClientAdapterError(ERRORS.DATABASE_DOCUMENT_NOT_FOUND);
           }
 
           const sourceDocData = sourceDocSnap.data();
@@ -788,8 +774,12 @@ class ClientAdapter {
         await runTransaction(ClientAdapter.firestore, performTransaction);
       }
     } catch (err) {
-      console.error(`[ClientAdapter.js - delete] An error has occurred.`);
-      throw err;
+      if (err instanceof ClientAdapterError) {
+        throw err;
+      } else {
+        this._outputErrorConsole("delete", err);
+        throw new ClientAdapterError(ERRORS.SYSTEM_UNKNOWN_ERROR);
+      }
     }
   }
 
@@ -807,8 +797,10 @@ class ClientAdapter {
    * @throws {Error} If document is not found in the archive.
    */
   async restore({ docId, prefix = null, transaction = null } = {}) {
+    if (!docId) {
+      throw new ClientAdapterError(ERRORS.VALIDATION_MISSING_DOC_ID);
+    }
     try {
-      if (!docId) throw new Error(`docId is required.`);
       const performTransaction = async (txn) => {
         const collectionPath = this.constructor.getCollectionPath(prefix);
         const archivePath = `${collectionPath}_archive`;
@@ -816,9 +808,7 @@ class ClientAdapter {
         const archiveDocRef = doc(archiveColRef, docId);
         const docSnapshot = await txn.get(archiveDocRef);
         if (!docSnapshot.exists()) {
-          throw new Error(
-            `Specified document is not found at ${archivePath}. docId: ${docId}`
-          );
+          throw new ClientAdapterError(ERRORS.DATABASE_DOCUMENT_NOT_FOUND);
         }
 
         // Get function to update counter document.
@@ -848,8 +838,12 @@ class ClientAdapter {
         );
       }
     } catch (err) {
-      console.error(`[ClientAdapter.js - restore] An error has occurred.`);
-      throw err;
+      if (err instanceof ClientAdapterError) {
+        throw err;
+      } else {
+        this._outputErrorConsole("restore", err);
+        throw new ClientAdapterError(ERRORS.SYSTEM_UNKNOWN_ERROR);
+      }
     }
   }
 
@@ -887,7 +881,9 @@ class ClientAdapter {
   subscribe({ docId, prefix = null } = {}) {
     this.unsubscribe();
 
-    if (!docId) throw new Error(`docId is required.`);
+    if (!docId) {
+      throw new ClientAdapterError(ERRORS.VALIDATION_MISSING_DOC_ID);
+    }
 
     try {
       const collectionPath = this.constructor.getCollectionPath(prefix);
@@ -901,8 +897,12 @@ class ClientAdapter {
         this.initialize(docSnapshot.data());
       });
     } catch (err) {
-      console.error(`[ClientAdapter.js - subscribe] An error has occurred.`);
-      throw err;
+      if (err instanceof ClientAdapterError) {
+        throw err;
+      } else {
+        this._outputErrorConsole("subscribe", err);
+        throw new ClientAdapterError(ERRORS.SYSTEM_UNKNOWN_ERROR);
+      }
     }
   }
 
@@ -937,7 +937,7 @@ class ClientAdapter {
     } else if (Array.isArray(constraints)) {
       queryConstraints.push(...this.createQueries(constraints));
     } else {
-      throw new Error(`constraints must be a string or array.`);
+      throw new ClientAdapterError(ERRORS.VALIDATION_INVALID_CONSTRAINTS);
     }
 
     try {
@@ -963,10 +963,12 @@ class ClientAdapter {
 
       return this.docs;
     } catch (err) {
-      console.error(
-        `[ClientAdapter.js - subscribeDocs] An error has occurred.`
-      );
-      throw err;
+      if (err instanceof ClientAdapterError) {
+        throw err;
+      } else {
+        this._outputErrorConsole("subscribeDocs", err);
+        throw new ClientAdapterError(ERRORS.SYSTEM_UNKNOWN_ERROR);
+      }
     }
   }
 }
