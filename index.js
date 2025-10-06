@@ -639,14 +639,13 @@ class ClientAdapter {
    * Checks if any child documents exist for this document, based on `hasMany` configuration.
    * - For collections, the prefix is applied to the collection path.
    *
-   * `hasMany` 設定に基づいて、このドキュメントに従属する子ドキュメントが存在するかを確認します。
-   * - コレクションタイプの定義に対しては `prefix` がパスに適用されます。
-   *
    * [NOTE]
-   * - 2025/06/04 現在、transaction.get() に Query を指定すると以下のエラーが発生。
-   *   Cannot read properties of undefined (reading 'path')
-   *   原因が不明なため、`transaction` が指定されている場合は警告を出力するとともに
-   *   getDocs() を使った処理に差し替えることとする。
+   * - 2025/10/06 現在、transaction.get() に Query を指定することはできない仕様。
+   *   そのため、依存ドキュメントの存在確認には getDocs() を使用することになるが、
+   *   transaction 内での読み取りにならず、当該処理の直後に他のプロセスから依存ドキュメントが
+   *   追加された場合に整合性を失う可能性あり。
+   *   引数 transaction が本来であれば不要だが、将来的に transaction.get() が
+   *   Query に対応した場合に備えて引数として受け取る形にしておく。
    *
    * @param {Object} args - Options for the check.
    * @param {Object|null} [args.transaction=null] - Firestore transaction object (optional).
@@ -655,13 +654,13 @@ class ClientAdapter {
    * @throws {Error} If `docId` is not set or query fails.
    */
   async hasChild({ transaction = null, prefix = null } = {}) {
-    if (!this.docId) {
-      throw new Error(
-        `The docId property is required for delete(). Call fetch() first.`
-      );
-    }
-
     try {
+      if (!this.docId) {
+        throw new Error(
+          `The docId property is required for delete(). Call fetch() first.`
+        );
+      }
+
       for (const item of this.constructor.hasMany) {
         const collectionPath =
           item.type === "collection" && prefix
@@ -674,27 +673,20 @@ class ClientAdapter {
         const constraint = where(item.field, item.condition, this.docId);
         const queryRef = query(colRef, constraint, limit(1));
 
-        let snapshot;
-        if (transaction) {
-          // JSDocの[NOTE]に記載の通り、transaction.get(Query) はエラーが発生するため、
-          // getDocs() を使用します。この場合、読み取りはトランザクションの一部として実行されません。
-          console.warn(
-            "[ClientAdapter.js - hasChild] A transaction was provided, but transaction.get(Query) is known to cause an error. Falling back to getDocs(). This read operation will NOT be part of the transaction."
-          );
-          snapshot = await getDocs(queryRef);
-        } else {
-          snapshot = await getDocs(queryRef);
-        }
+        /** transaction.get() が Query に対応した場合は以下をコメントアウト */
+        const snapshot = await getDocs(queryRef);
+
+        /** transaction.get() が Query に対応した場合は以下を使用 */
+        // const snapshot = transaction
+        //   ? await transaction.get(queryRef)
+        //   : await getDocs(queryRef);
 
         if (!snapshot.empty) return item;
       }
 
       return false;
     } catch (error) {
-      console.error(
-        `[ClientAdapter.js - hasChild] An error has occurred:`,
-        error
-      );
+      console.error(`[ClientAdapter.js - hasChild] ${error.message}`, error);
       throw error;
     }
   }
