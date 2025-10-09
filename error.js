@@ -121,6 +121,11 @@ export const ERRORS = {
   },
 
   // システムエラー (SYSTEM)
+  SYSTEM_AUTHENTICATION_NOT_INITIALIZED: {
+    code: "SYSTEM/AUTHENTICATION_NOT_INITIALIZED",
+    message: "Authentication not initialized",
+    userMessage: "認証が初期化されていません",
+  },
   SYSTEM_FIRESTORE_NOT_INITIALIZED: {
     code: "SYSTEM/FIRESTORE_NOT_INITIALIZED",
     message: "Firestore not initialized",

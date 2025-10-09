@@ -47,6 +47,18 @@ class ClientAdapter {
   }
 
   /**
+   * Returns the Authentication instance.
+   */
+  get auth() {
+    if (!ClientAdapter.auth) {
+      throw new ClientAdapterError(
+        ERRORS.SYSTEM_AUTHENTICATION_NOT_INITIALIZED
+      );
+    }
+    return ClientAdapter.auth;
+  }
+
+  /**
    * Returns the Firestore instance.
    * - 2025-07-11 added
    */
