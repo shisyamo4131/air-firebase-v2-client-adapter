@@ -70,19 +70,6 @@ class ClientAdapter {
   }
 
   /**
-   * Outputs an error message to the console.
-   * - Use this method only for unexpected errors.
-   * @param {string} funcName
-   * @param {Error} err - The error object to log.
-   */
-  _outputErrorConsole(funcName, err) {
-    console.error(
-      `[ClientAdapter.js - ${funcName}] Unknown error has occurred:`,
-      err
-    );
-  }
-
-  /**
    * Assigns an autonumber to the instance using a Firestore transaction.
    * - Retrieves the current autonumber doc from the `Autonumbers` collection.
    * - Increments the number and sets it on the instance.
