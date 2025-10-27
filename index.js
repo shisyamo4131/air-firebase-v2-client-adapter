@@ -911,22 +911,41 @@ class ClientAdapter {
    * - If `constraints` is an array, applies Firestore query conditions.
    * - If `prefix` is provided, it is used to resolve the collection path.
    *
-   * Firestore コレクションに対してリアルタイムリスナーを設定し、
-   * ドキュメントの変更を監視します。
-   *
    * @param {Object} args - Subscribe options.
    * @param {Array|string} args.constraints - Query condition array or search string.
    * @param {Array} [args.options=[]] - Additional query conditions.
    * @param {string|null} [args.prefix=null] - Optional path prefix.
-   * @param {function|null} [args.callback=null] - Callback executed on document changes.
+   * @param {function|null} [args.callback=null] - [deprecated] Callback executed on document changes.
+   * @param {function|null} [callback=null] - Callback executed on document changes (moved from args).
    * @returns {Array<Object>} Live-updated document data.
    */
-  subscribeDocs({
-    constraints = [],
-    options = [],
-    prefix = null,
-    callback,
-  } = {}) {
+  subscribeDocs(
+    {
+      constraints = [],
+      options = [],
+      prefix = null,
+      callback: deprecatedCallback = null,
+    } = {},
+    callback = null
+  ) {
+    /**
+     * [DEPRECATION NOTICE]
+     * - The `callback` parameter has been moved from the options object to a separate parameter.
+     * - Please update your code accordingly.
+     */
+    if (deprecatedCallback) {
+      console.warn(
+        "[FireModel-subscribeDocs] The 'callback' parameter has been moved from the options object to a separate parameter. Please update your code accordingly."
+      );
+      if (!callback) {
+        callback = deprecatedCallback;
+      } else {
+        console.warn(
+          "[FireModel-subscribeDocs] The 'callback' parameter was provided both in the options object and as a separate parameter. The separate parameter will take precedence."
+        );
+      }
+    }
+
     this.unsubscribe();
     const queryConstraints = [];
 
