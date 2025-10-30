@@ -128,56 +128,56 @@ class ClientAdapter {
     }
   }
 
-  /**
-   * Returns a function to update the counter document in Firestore.
-   * - This function treats 'this' as a FireModel instance.
-   * @param {Object} args - Parameters for counter update.
-   * @param {Object} args.transaction - Firestore transaction object (required).
-   * @param {boolean} [args.increment=true] - Whether to increment (true) or decrement (false) the counter.
-   * @param {string|null} [args.prefix=null] - Optional path prefix for collection.
-   * @returns {Promise<Function>} Function to update the counter document.
-   */
-  async getCounterUpdater(args = {}) {
-    const { transaction, increment = true, prefix = null } = args;
-    // transaction is required
-    if (!transaction) {
-      throw new ClientAdapterError(ERRORS.VALIDATION_MISSING_TRANSACTION);
-    }
+  // /**
+  //  * Returns a function to update the counter document in Firestore.
+  //  * - This function treats 'this' as a FireModel instance.
+  //  * @param {Object} args - Parameters for counter update.
+  //  * @param {Object} args.transaction - Firestore transaction object (required).
+  //  * @param {boolean} [args.increment=true] - Whether to increment (true) or decrement (false) the counter.
+  //  * @param {string|null} [args.prefix=null] - Optional path prefix for collection.
+  //  * @returns {Promise<Function>} Function to update the counter document.
+  //  */
+  // async getCounterUpdater(args = {}) {
+  //   const { transaction, increment = true, prefix = null } = args;
+  //   // transaction is required
+  //   if (!transaction) {
+  //     throw new ClientAdapterError(ERRORS.VALIDATION_MISSING_TRANSACTION);
+  //   }
 
-    try {
-      // Get collection path defined by class.
-      // -> `getCollectionPath()` is a static method defined in FireModel.
-      // ex) `customers` or `companies/{companyId}/customers`
-      const collectionPath = this.constructor.getCollectionPath(prefix);
+  //   try {
+  //     // Get collection path defined by class.
+  //     // -> `getCollectionPath()` is a static method defined in FireModel.
+  //     // ex) `customers` or `companies/{companyId}/customers`
+  //     const collectionPath = this.constructor.getCollectionPath(prefix);
 
-      // Divide collection path into segments.
-      // ex) `["companies", "{companyId}", "customers"]`
-      const segments = collectionPath.split("/");
+  //     // Divide collection path into segments.
+  //     // ex) `["companies", "{companyId}", "customers"]`
+  //     const segments = collectionPath.split("/");
 
-      // Get collection name (Last segment is collection name)
-      const colName = segments.pop();
+  //     // Get collection name (Last segment is collection name)
+  //     const colName = segments.pop();
 
-      // Determine effective collection path for counter-document.
-      const effectiveDocPath = `${segments.join("/")}/meta/docCounter`;
-      const docRef = doc(ClientAdapter.firestore, effectiveDocPath);
-      const docSnap = await transaction.get(docRef);
-      if (!docSnap.exists()) {
-        return () => transaction.set(docRef, { [colName]: increment ? 1 : 0 });
-      } else {
-        return () =>
-          transaction.update(docRef, {
-            [colName]: FieldValue_increment(increment ? 1 : -1),
-          });
-      }
-    } catch (err) {
-      if (err instanceof ClientAdapterError) {
-        throw err;
-      } else {
-        this._outputErrorConsole("getCounterUpdater", err);
-        throw new ClientAdapterError(ERRORS.SYSTEM_UNKNOWN_ERROR);
-      }
-    }
-  }
+  //     // Determine effective collection path for counter-document.
+  //     const effectiveDocPath = `${segments.join("/")}/meta/docCounter`;
+  //     const docRef = doc(ClientAdapter.firestore, effectiveDocPath);
+  //     const docSnap = await transaction.get(docRef);
+  //     if (!docSnap.exists()) {
+  //       return () => transaction.set(docRef, { [colName]: increment ? 1 : 0 });
+  //     } else {
+  //       return () =>
+  //         transaction.update(docRef, {
+  //           [colName]: FieldValue_increment(increment ? 1 : -1),
+  //         });
+  //     }
+  //   } catch (err) {
+  //     if (err instanceof ClientAdapterError) {
+  //       throw err;
+  //     } else {
+  //       this._outputErrorConsole("getCounterUpdater", err);
+  //       throw new ClientAdapterError(ERRORS.SYSTEM_UNKNOWN_ERROR);
+  //     }
+  //   }
+  // }
 
   /**
    * Create a new document in Firestore.
@@ -213,12 +213,12 @@ class ClientAdapter {
             : null;
 
         // Get function to update counter document.
-        const adapter = this.constructor.getAdapter();
-        const counterUpdater = await adapter.getCounterUpdater.bind(this)({
-          transaction: txn,
-          increment: true,
-          prefix,
-        });
+        // const adapter = this.constructor.getAdapter();
+        // const counterUpdater = await adapter.getCounterUpdater.bind(this)({
+        //   transaction: txn,
+        //   increment: true,
+        //   prefix,
+        // });
 
         // Prepare document reference
         const collectionPath = this.constructor.getCollectionPath(prefix);
@@ -240,8 +240,8 @@ class ClientAdapter {
         // Update autonumber if applicable
         if (updateAutonumber) await updateAutonumber();
 
-        // Update counter document
-        if (counterUpdater) await counterUpdater();
+        // // Update counter document
+        // if (counterUpdater) await counterUpdater();
 
         // Execute callback if provided
         if (callBack) await callBack(txn);
@@ -734,12 +734,12 @@ class ClientAdapter {
         }
 
         // Get function to update counter document.
-        const adapter = this.constructor.getAdapter();
-        const counterUpdater = await adapter.getCounterUpdater.bind(this)({
-          transaction: txn,
-          increment: false,
-          prefix,
-        });
+        // const adapter = this.constructor.getAdapter();
+        // const counterUpdater = await adapter.getCounterUpdater.bind(this)({
+        //   transaction: txn,
+        //   increment: false,
+        //   prefix,
+        // });
 
         // If logicalDelete is enabled, archive the document before deletion
         if (this.constructor.logicalDelete) {
@@ -762,7 +762,7 @@ class ClientAdapter {
 
         txn.delete(docRef);
 
-        if (counterUpdater) await counterUpdater();
+        // if (counterUpdater) await counterUpdater();
 
         if (callBack) await callBack(txn);
       };
@@ -811,19 +811,19 @@ class ClientAdapter {
         }
 
         // Get function to update counter document.
-        const adapter = this.constructor.getAdapter();
-        const counterUpdater = await adapter.getCounterUpdater.bind(this)({
-          transaction: txn,
-          increment: true,
-          prefix,
-        });
+        // const adapter = this.constructor.getAdapter();
+        // const counterUpdater = await adapter.getCounterUpdater.bind(this)({
+        //   transaction: txn,
+        //   increment: true,
+        //   prefix,
+        // });
 
         const colRef = collection(ClientAdapter.firestore, collectionPath);
         const docRef = doc(colRef, docId);
         txn.delete(archiveDocRef);
         txn.set(docRef, docSnapshot.data());
 
-        if (counterUpdater) await counterUpdater();
+        // if (counterUpdater) await counterUpdater();
 
         return docRef;
       };
