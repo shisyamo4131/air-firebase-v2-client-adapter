@@ -185,16 +185,16 @@ class ClientAdapter {
    * @param {string} [args.docId] - Document ID to use (optional).
    * @param {boolean} [args.useAutonumber=true] - Whether to use auto-numbering.
    * @param {Object} [args.transaction] - Firestore transaction.
-   * @param {Function} [args.callBack] - Callback function.
+   * @param {Function} [args.callback] - Callback function.
    * @param {string} [args.prefix] - Path prefix.
    * @returns {Promise<DocumentReference>} Reference to the created document.
-   * @throws {Error} If creation fails or `callBack` is not a function.
+   * @throws {Error} If creation fails or `callback` is not a function.
    */
   async create(args = {}) {
-    const { docId, useAutonumber = true, transaction, callBack, prefix } = args;
+    const { docId, useAutonumber = true, transaction, callback, prefix } = args;
 
-    // `callBack` must be a function if provided.
-    if (callBack && typeof callBack !== "function") {
+    // `callback` must be a function if provided.
+    if (callback && typeof callback !== "function") {
       throw new ClientAdapterError(ERRORS.VALIDATION_INVALID_CALLBACK);
     }
 
@@ -244,7 +244,7 @@ class ClientAdapter {
         // if (counterUpdater) await counterUpdater();
 
         // Execute callback if provided
-        if (callBack) await callBack(txn);
+        if (callback) await callback(txn);
 
         // Return document reference
         return docRef;
@@ -557,30 +557,30 @@ class ClientAdapter {
    * Updates the Firestore document using the current instance data.
    * - Requires `this.docId` to be set (must call `fetch()` beforehand).
    * - Runs inside a transaction. If not provided, a new one will be created.
-   * - If `callBack` is specified, it will be executed after the update.
+   * - If `callback` is specified, it will be executed after the update.
    * - If `prefix` is provided, it is used to resolve the collection path.
    *
    * Firestore ドキュメントを現在のプロパティ値で更新します。
    * - `this.docId` が設定されていない場合はエラーになります（事前に `fetch()` を実行してください）。
    * - 更新はトランザクション内で行われます。トランザクションが指定されない場合は新たに生成されます。
-   * - `callBack` が指定されていれば、更新後に実行されます。
+   * - `callback` が指定されていれば、更新後に実行されます。
    * - `prefix` が指定されている場合は、コレクションパスの解決に使用されます。
    *
    * @param {Object} args - Parameters for update operation.
    *                        更新処理のためのパラメータ。
    * @param {Object|null} [args.transaction=null] - Firestore transaction object.
    *                                                Firestore のトランザクションオブジェクト。
-   * @param {function|null} [args.callBack=null] - Callback executed after update.
+   * @param {function|null} [args.callback=null] - Callback executed after update.
    *                                               更新後に実行されるコールバック関数。
    * @param {string|null} [args.prefix=null] - Optional Firestore path prefix.
    *                                           コレクションパスのプレフィックス（任意）。
    * @returns {Promise<DocumentReference>} Reference to the updated document.
    *                                       更新されたドキュメントのリファレンス。
-   * @throws {Error} If `docId` is not set, or if `callBack` is not a function.
-   *                 `docId` が未設定、または `callBack` が関数でない場合にスローされます。
+   * @throws {Error} If `docId` is not set, or if `callback` is not a function.
+   *                 `docId` が未設定、または `callback` が関数でない場合にスローされます。
    */
-  async update({ transaction = null, callBack = null, prefix = null } = {}) {
-    if (callBack !== null && typeof callBack !== "function") {
+  async update({ transaction = null, callback = null, prefix = null } = {}) {
+    if (callback !== null && typeof callback !== "function") {
       throw new ClientAdapterError(ERRORS.VALIDATION_INVALID_CALLBACK);
     }
 
@@ -605,7 +605,7 @@ class ClientAdapter {
         this.uid = ClientAdapter.auth?.currentUser?.uid || "unknown";
 
         txn.set(docRef, this);
-        if (callBack) await callBack(txn);
+        if (callback) await callback(txn);
         return docRef;
       };
 
@@ -697,17 +697,17 @@ class ClientAdapter {
    *                        削除処理のパラメータ。
    * @param {Object|null} [args.transaction=null] - Firestore transaction object (optional).
    *                                                Firestore のトランザクションオブジェクト（任意）。
-   * @param {function|null} [args.callBack=null] - Callback executed after deletion (optional).
+   * @param {function|null} [args.callback=null] - Callback executed after deletion (optional).
    *                                               削除後に実行されるコールバック関数（任意）。
    * @param {string|null} [args.prefix=null] - Optional Firestore path prefix.
    *                                           コレクションパスのプレフィックス（任意）。
    * @returns {Promise<void>} Resolves when deletion is complete.
    *                          削除が完了したら解決されるプロミス。
-   * @throws {Error} If `docId` is missing, `callBack` is not a function, or document is undeletable.
-   *                 `docId` が未設定、`callBack` が関数でない、または削除対象のドキュメントが存在しない場合。
+   * @throws {Error} If `docId` is missing, `callback` is not a function, or document is undeletable.
+   *                 `docId` が未設定、`callback` が関数でない、または削除対象のドキュメントが存在しない場合。
    */
-  async delete({ transaction = null, callBack = null, prefix = null } = {}) {
-    if (callBack !== null && typeof callBack !== "function") {
+  async delete({ transaction = null, callback = null, prefix = null } = {}) {
+    if (callback !== null && typeof callback !== "function") {
       throw new ClientAdapterError(ERRORS.VALIDATION_INVALID_CALLBACK);
     }
 
@@ -764,7 +764,7 @@ class ClientAdapter {
 
         // if (counterUpdater) await counterUpdater();
 
-        if (callBack) await callBack(txn);
+        if (callback) await callback(txn);
       };
 
       if (transaction) {
