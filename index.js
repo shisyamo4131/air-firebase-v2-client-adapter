@@ -874,10 +874,11 @@ class ClientAdapter {
    * @param {Object} args - Subscribe options.
    * @param {string} args.docId - Document ID to subscribe to.
    * @param {string|null} [args.prefix=null] - Optional path prefix.
+   * @param {function|null} [callback=null] - Callback executed on document changes (moved from args).
    * @returns {void}
    * @throws {Error} If docId is missing.
    */
-  subscribe({ docId, prefix = null } = {}) {
+  subscribe({ docId, prefix = null } = {}, callback = null) {
     this.unsubscribe();
 
     if (!docId) {
@@ -894,6 +895,7 @@ class ClientAdapter {
       const docRef = doc(colRef, docId);
       this.listener = onSnapshot(docRef, (docSnapshot) => {
         this.initialize(docSnapshot.data());
+        if (callback) callback(docSnapshot.data());
       });
     } catch (err) {
       if (err instanceof ClientAdapterError) {
