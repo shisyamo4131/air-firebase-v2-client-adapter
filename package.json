@@ -1,6 +1,6 @@
 {
   "name": "@shisyamo4131/air-firebase-v2-client-adapter",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "client adapter for FireModel",
   "type": "module",
   "main": "index.js",
