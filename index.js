@@ -70,6 +70,40 @@ class ClientAdapter {
   }
 
   /**
+   * 指定されたドキュメントIDからFirestoreのドキュメント参照を取得します。
+   * - コンバーターを適用したDocumentReferenceを返します。
+   * - このメソッドはFireModelクラスから静的に呼び出されることを想定しています。
+   *
+   * @param {Object} args - パラメータオブジェクト
+   * @param {string} args.docId - ドキュメントID（必須）
+   * @param {string|null} [args.prefix=null] - パスのプレフィックス（任意）
+   * @returns {DocumentReference} Firestoreのドキュメント参照
+   * @throws {Error} `docId` が指定されていない場合
+   */
+  getDocRef({ docId, prefix = null } = {}) {
+    if (!docId) {
+      throw new ClientAdapterError(ERRORS.VALIDATION_MISSING_DOC_ID);
+    }
+
+    try {
+      const collectionPath = this.constructor.getCollectionPath(prefix);
+      const colRef = collection(
+        ClientAdapter.firestore,
+        collectionPath
+      ).withConverter(this.constructor.converter());
+
+      return doc(colRef, docId);
+    } catch (err) {
+      if (err instanceof ClientAdapterError) {
+        throw err;
+      } else {
+        this._outputErrorConsole("getDocRef", err);
+        throw new ClientAdapterError(ERRORS.SYSTEM_UNKNOWN_ERROR);
+      }
+    }
+  }
+
+  /**
    * Assigns an autonumber to the instance using a Firestore transaction.
    * - Retrieves the current autonumber doc from the `Autonumbers` collection.
    * - Increments the number and sets it on the instance.
