@@ -15,7 +15,6 @@ import {
   collectionGroup,
   onSnapshot,
   getFirestore,
-  increment as FieldValue_increment,
 } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import { ClientAdapterError, ERRORS } from "./error.js";
@@ -1024,6 +1023,15 @@ class ClientAdapter {
         throw new ClientAdapterError(ERRORS.SYSTEM_UNKNOWN_ERROR);
       }
     }
+  }
+
+  /**
+   * Firestore トランザクションを実行します。
+   * @param {Function} updateFunction - トランザクション内で実行する関数
+   * @returns {Promise<any>} トランザクションの結果
+   */
+  async runTransaction(updateFunction) {
+    return await runTransaction(this.firestore, updateFunction);
   }
 }
 
