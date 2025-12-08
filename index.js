@@ -612,7 +612,8 @@ class ClientAdapter {
    * @throws {Error} If `docId` is not set, or if `callback` is not a function.
    *                 `docId` が未設定、または `callback` が関数でない場合にスローされます。
    */
-  async update({ transaction = null, callback = null, prefix = null } = {}) {
+  async update(args = {}) {
+    const { transaction = null, callback = null, prefix = null } = args;
     if (callback !== null && typeof callback !== "function") {
       throw new ClientAdapterError(ERRORS.VALIDATION_INVALID_CALLBACK);
     }
@@ -739,7 +740,8 @@ class ClientAdapter {
    * @throws {Error} If `docId` is missing, `callback` is not a function, or document is undeletable.
    *                 `docId` が未設定、`callback` が関数でない、または削除対象のドキュメントが存在しない場合。
    */
-  async delete({ transaction = null, callback = null, prefix = null } = {}) {
+  async delete(args = {}) {
+    const { transaction = null, callback = null, prefix = null } = args;
     if (callback !== null && typeof callback !== "function") {
       throw new ClientAdapterError(ERRORS.VALIDATION_INVALID_CALLBACK);
     }
