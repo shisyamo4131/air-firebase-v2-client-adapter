@@ -233,8 +233,8 @@ class ClientAdapter {
 
     try {
       // Pre-create hooks and validation
-      await this.beforeCreate();
-      await this.beforeEdit();
+      await this.beforeCreate(args);
+      await this.beforeEdit(args);
       this.validate();
 
       // transaction processing
@@ -622,8 +622,8 @@ class ClientAdapter {
     }
 
     try {
-      await this.beforeUpdate();
-      await this.beforeEdit();
+      await this.beforeUpdate(args);
+      await this.beforeEdit(args);
       this.validate();
 
       const performTransaction = async (txn) => {
@@ -749,7 +749,7 @@ class ClientAdapter {
     }
 
     try {
-      await this.beforeDelete();
+      await this.beforeDelete(args);
 
       const collectionPath = this.constructor.getCollectionPath(prefix);
       const colRef = collection(ClientAdapter.firestore, collectionPath);
