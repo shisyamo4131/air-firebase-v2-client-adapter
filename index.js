@@ -987,6 +987,7 @@ class ClientAdapter {
     const queryConstraints = [];
 
     if (typeof constraints === "string") {
+      if (!constraints) return this.docs; // 空文字列の場合は何もせず返す
       queryConstraints.push(...this.createTokenMapQueries(constraints));
       queryConstraints.push(...this.createQueries(options));
     } else if (Array.isArray(constraints)) {
