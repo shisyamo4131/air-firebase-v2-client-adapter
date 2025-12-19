@@ -992,6 +992,8 @@ class ClientAdapter {
       queryConstraints.push(...this.createQueries(options));
     } else if (Array.isArray(constraints)) {
       queryConstraints.push(...this.createQueries(constraints));
+    } else if (constraints == null || constraints === undefined) {
+      return this.docs;
     } else {
       throw new ClientAdapterError(ERRORS.VALIDATION_INVALID_CONSTRAINTS);
     }
