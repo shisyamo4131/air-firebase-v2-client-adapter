@@ -131,6 +131,21 @@ export const ERRORS = {
     message: "Firestore not initialized",
     userMessage: "データベースが初期化されていません",
   },
+  SYSTEM_FUNCTIONS_NOT_INITIALIZED: {
+    code: "SYSTEM_FUNCTIONS_NOT_INITIALIZED",
+    message: "Functions instance is not initialized.",
+    userMessage: "functionsが初期化されていません",
+  },
+  SYSTEM_GEOPOINT_NOT_INITIALIZED: {
+    code: "SYSTEM_GEOPOINT_NOT_INITIALIZED",
+    message: "GeoPoint class is not initialized.",
+    userMessage: "GeoPointクラスが初期化されていません",
+  },
+  SYSTEM_HTTPS_CALLABLE_NOT_INITIALIZED: {
+    code: "SYSTEM_HTTPS_CALLABLE_NOT_INITIALIZED",
+    message: "httpsCallable function is not initialized.",
+    userMessage: "httpsCallable関数が初期化されていません",
+  },
   SYSTEM_UNKNOWN_ERROR: {
     code: "SYSTEM/UNKNOWN_ERROR",
     message: "unknown error occurred",

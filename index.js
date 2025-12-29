@@ -1,6 +1,8 @@
 /**
  * アプリ側で使用する FireModel のアダプターです。
  * FireModel に Firestore に対する CRUD 機能を注入します。
+ *
+ * @update 2025-12-29 - Added GeoPoint import and httpsCallable import.
  */
 import {
   collection,
@@ -15,8 +17,10 @@ import {
   collectionGroup,
   onSnapshot,
   getFirestore,
+  GeoPoint, // 2025-12-29 added
 } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
+import { getFunctions, httpsCallable } from "firebase/functions"; // 2025-12-29 added
 import { ClientAdapterError, ERRORS } from "./error.js";
 
 /*****************************************************************************
@@ -27,10 +31,16 @@ import { ClientAdapterError, ERRORS } from "./error.js";
 class ClientAdapter {
   static firestore = null;
   static auth = null;
+  static functions = null; // 2025-12-29 added
+  static GeoPoint = null; // 2025-12-29 added
+  static httpsCallable = null; // 2025-12-29 added
 
   constructor() {
     ClientAdapter.firestore = getFirestore();
     ClientAdapter.auth = getAuth();
+    ClientAdapter.functions = getFunctions(); // 2025-12-29 added
+    ClientAdapter.GeoPoint = GeoPoint; // 2025-12-29 added
+    ClientAdapter.httpsCallable = httpsCallable; // 2025-12-29 added
   }
 
   get type() {
@@ -66,6 +76,39 @@ class ClientAdapter {
       throw new ClientAdapterError(ERRORS.SYSTEM_FIRESTORE_NOT_INITIALIZED);
     }
     return ClientAdapter.firestore;
+  }
+
+  /**
+   * Returns the Functions instance.
+   * - 2025-12-29 added
+   */
+  get functions() {
+    if (!ClientAdapter.functions) {
+      throw new ClientAdapterError(ERRORS.SYSTEM_FUNCTIONS_NOT_INITIALIZED);
+    }
+    return ClientAdapter.functions;
+  }
+
+  /**
+   * Returns the GeoPoint class.
+   * - 2025-12-29 added
+   */
+  get GeoPoint() {
+    if (!ClientAdapter.GeoPoint) {
+      throw new ClientAdapterError(ERRORS.SYSTEM_GEOPOINT_NOT_INITIALIZED);
+    }
+    return ClientAdapter.GeoPoint;
+  }
+
+  /**
+   * Returns the httpsCallable function.
+   * - 2025-12-29 added
+   */
+  get httpsCallable() {
+    if (!ClientAdapter.httpsCallable) {
+      throw new ClientAdapterError(ERRORS.SYSTEM_HTTPSCALLABLE_NOT_INITIALIZED);
+    }
+    return ClientAdapter.httpsCallable;
   }
 
   /**
