@@ -32,6 +32,7 @@ import { ClientAdapterError, ERRORS } from "./error.js";
 class ClientAdapter {
   static firestore = null;
   static auth = null;
+  static functions = null; // 2025-12-29 added
   static GeoPoint = null; // 2025-12-29 added
   static httpsCallable = null; // 2025-12-29 added
 
@@ -80,13 +81,10 @@ class ClientAdapter {
 
   /**
    * Returns the Functions instance.
-   * - 2025-12-29 added
+   * - 2025-12-30 modified to return null if not initialized (instead of throwing error)
    */
   get functions() {
-    if (!ClientAdapter.functions) {
-      throw new ClientAdapterError(ERRORS.SYSTEM_FUNCTIONS_NOT_INITIALIZED);
-    }
-    return ClientAdapter.functions;
+    return ClientAdapter.functions; // ← null を返すように変更（エラーをスローしない）
   }
 
   /**
