@@ -2,6 +2,7 @@
  * アプリ側で使用する FireModel のアダプターです。
  * FireModel に Firestore に対する CRUD 機能を注入します。
  *
+ * @update 2025-12-30 - Modified constructor to accept Functions instance.
  * @update 2025-12-29 - Added GeoPoint import and httpsCallable import.
  */
 import {
@@ -20,7 +21,7 @@ import {
   GeoPoint, // 2025-12-29 added
 } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
-import { getFunctions, httpsCallable } from "firebase/functions"; // 2025-12-29 added
+import { httpsCallable } from "firebase/functions"; // 2025-12-29 added
 import { ClientAdapterError, ERRORS } from "./error.js";
 
 /*****************************************************************************
@@ -31,14 +32,13 @@ import { ClientAdapterError, ERRORS } from "./error.js";
 class ClientAdapter {
   static firestore = null;
   static auth = null;
-  static functions = null; // 2025-12-29 added
   static GeoPoint = null; // 2025-12-29 added
   static httpsCallable = null; // 2025-12-29 added
 
-  constructor() {
+  constructor(functions = null) {
     ClientAdapter.firestore = getFirestore();
     ClientAdapter.auth = getAuth();
-    ClientAdapter.functions = getFunctions(); // 2025-12-29 added
+    ClientAdapter.functions = functions; // 2025-12-30 changed from getFunctions();
     ClientAdapter.GeoPoint = GeoPoint; // 2025-12-29 added
     ClientAdapter.httpsCallable = httpsCallable; // 2025-12-29 added
   }
