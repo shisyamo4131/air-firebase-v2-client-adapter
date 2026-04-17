@@ -62,7 +62,7 @@ class ClientAdapter {
   get auth() {
     if (!ClientAdapter.auth) {
       throw new ClientAdapterError(
-        ERRORS.SYSTEM_AUTHENTICATION_NOT_INITIALIZED
+        ERRORS.SYSTEM_AUTHENTICATION_NOT_INITIALIZED,
       );
     }
     return ClientAdapter.auth;
@@ -129,7 +129,7 @@ class ClientAdapter {
       const collectionPath = this.constructor.getCollectionPath(prefix);
       const colRef = collection(
         ClientAdapter.firestore,
-        collectionPath
+        collectionPath,
       ).withConverter(this.constructor.converter());
 
       return doc(colRef, docId);
@@ -171,7 +171,7 @@ class ClientAdapter {
       const docSnap = await transaction.get(docRef);
       if (!docSnap.exists()) {
         throw new ClientAdapterError(
-          ERRORS.BUSINESS_AUTONUMBER_DOCUMENT_NOT_FOUND
+          ERRORS.BUSINESS_AUTONUMBER_DOCUMENT_NOT_FOUND,
         );
       }
 
@@ -298,7 +298,7 @@ class ClientAdapter {
         const collectionPath = this.constructor.getCollectionPath(prefix);
         const colRef = collection(
           ClientAdapter.firestore,
-          collectionPath
+          collectionPath,
         ).withConverter(this.constructor.converter());
         const docRef = docId ? doc(colRef, docId) : doc(colRef);
 
@@ -332,9 +332,11 @@ class ClientAdapter {
     } catch (err) {
       if (err instanceof ClientAdapterError) {
         throw err;
+      } else if (err.name === "ValidationError") {
+        throw new ClientAdapterError(ERRORS.VALIDATION_FIELD_ERROR, err);
       } else {
         this._outputErrorConsole("create", err);
-        throw new ClientAdapterError(ERRORS.SYSTEM_UNKNOWN_ERROR);
+        throw new ClientAdapterError(ERRORS.SYSTEM_UNKNOWN_ERROR, err);
       }
     }
   }
@@ -361,7 +363,7 @@ class ClientAdapter {
       // Prepare document reference.
       const colRef = collection(
         ClientAdapter.firestore,
-        collectionPath
+        collectionPath,
       ).withConverter(this.constructor.converter());
       const docRef = doc(colRef, docId);
 
@@ -406,7 +408,7 @@ class ClientAdapter {
       // Prepare document reference.
       const colRef = collection(
         ClientAdapter.firestore,
-        collectionPath
+        collectionPath,
       ).withConverter(this.constructor.converter());
       const docRef = doc(colRef, docId);
 
@@ -448,7 +450,7 @@ class ClientAdapter {
         case "orderBy":
           if (!["asc", "desc"].includes(args[1] || "asc")) {
             throw new ClientAdapterError(
-              ERRORS.VALIDATION_INVALID_ORDERBY_DIRECTION
+              ERRORS.VALIDATION_INVALID_ORDERBY_DIRECTION,
             );
           }
           result.push(orderBy(args[0], args[1] || "asc"));
@@ -486,7 +488,7 @@ class ClientAdapter {
     // サロゲートペア文字（絵文字など）を除外
     const target = constraints.replace(
       /[\uD800-\uDBFF]|[\uDC00-\uDFFF]|~|\*|\[|\]|\s+/g,
-      ""
+      "",
     );
 
     // 1 文字・2 文字のトークンを生成
@@ -548,7 +550,7 @@ class ClientAdapter {
       const collectionPath = this.constructor.getCollectionPath(prefix);
       const colRef = collection(
         ClientAdapter.firestore,
-        collectionPath
+        collectionPath,
       ).withConverter(this.constructor.converter());
 
       const queryRef = query(colRef, ...queryConstraints);
@@ -602,7 +604,7 @@ class ClientAdapter {
       const collectionPath = this.constructor.getCollectionPath(prefix);
       const colRef = collection(
         ClientAdapter.firestore,
-        collectionPath
+        collectionPath,
       ).withConverter(this.constructor.converter());
 
       const querySnapshotArray = await Promise.all(
@@ -611,11 +613,11 @@ class ClientAdapter {
           return getDocs(q);
           /** transaction.get() が Query に対応した場合は以下を使用 */
           // return transaction ? transaction.get(q) : getDocs(q);
-        })
+        }),
       );
 
       return querySnapshotArray.flatMap((snapshot) =>
-        snapshot.docs.map((doc) => doc.data())
+        snapshot.docs.map((doc) => doc.data()),
       );
     } catch (err) {
       if (err instanceof ClientAdapterError) {
@@ -672,7 +674,7 @@ class ClientAdapter {
         const collectionPath = this.constructor.getCollectionPath(prefix);
         const colRef = collection(
           ClientAdapter.firestore,
-          collectionPath
+          collectionPath,
         ).withConverter(this.constructor.converter());
         const docRef = doc(colRef, this.docId);
 
@@ -692,9 +694,11 @@ class ClientAdapter {
     } catch (err) {
       if (err instanceof ClientAdapterError) {
         throw err;
+      } else if (err.name === "ValidationError") {
+        throw new ClientAdapterError(ERRORS.VALIDATION_FIELD_ERROR, err);
       } else {
         this._outputErrorConsole("update", err);
-        throw new ClientAdapterError(ERRORS.SYSTEM_UNKNOWN_ERROR);
+        throw new ClientAdapterError(ERRORS.SYSTEM_UNKNOWN_ERROR, err);
       }
     }
   }
@@ -830,7 +834,7 @@ class ClientAdapter {
           const sourceDocData = sourceDocSnap.data();
           const archiveColRef = collection(
             ClientAdapter.firestore,
-            `${collectionPath}_archive`
+            `${collectionPath}_archive`,
           );
           const archiveDocRef = doc(archiveColRef, this.docId);
           txn.set(archiveDocRef, sourceDocData);
@@ -909,7 +913,7 @@ class ClientAdapter {
       } else {
         return await runTransaction(
           ClientAdapter.firestore,
-          performTransaction
+          performTransaction,
         );
       }
     } catch (err) {
@@ -966,7 +970,7 @@ class ClientAdapter {
       // const colRef = collection(ClientAdapter.firestore, collectionPath);
       const colRef = collection(
         ClientAdapter.firestore,
-        collectionPath
+        collectionPath,
       ).withConverter(this.constructor.converter());
       const docRef = doc(colRef, docId);
       this.listener = onSnapshot(docRef, (docSnapshot) => {
@@ -1004,7 +1008,7 @@ class ClientAdapter {
       prefix = null,
       callback: deprecatedCallback = null,
     } = {},
-    callback = null
+    callback = null,
   ) {
     /**
      * [DEPRECATION NOTICE]
@@ -1013,13 +1017,13 @@ class ClientAdapter {
      */
     if (deprecatedCallback) {
       console.warn(
-        "[FireModel-subscribeDocs] The 'callback' parameter has been moved from the options object to a separate parameter. Please update your code accordingly."
+        "[FireModel-subscribeDocs] The 'callback' parameter has been moved from the options object to a separate parameter. Please update your code accordingly.",
       );
       if (!callback) {
         callback = deprecatedCallback;
       } else {
         console.warn(
-          "[FireModel-subscribeDocs] The 'callback' parameter was provided both in the options object and as a separate parameter. The separate parameter will take precedence."
+          "[FireModel-subscribeDocs] The 'callback' parameter was provided both in the options object and as a separate parameter. The separate parameter will take precedence.",
         );
       }
     }
@@ -1043,7 +1047,7 @@ class ClientAdapter {
       const collectionPath = this.constructor.getCollectionPath(prefix);
       const colRef = collection(
         ClientAdapter.firestore,
-        collectionPath
+        collectionPath,
       ).withConverter(this.constructor.converter());
       const queryRef = query(colRef, ...queryConstraints);
 
@@ -1051,7 +1055,7 @@ class ClientAdapter {
         snapshot.docChanges().forEach((change) => {
           const item = change.doc.data();
           const index = this.docs.findIndex(
-            ({ docId }) => docId === item.docId
+            ({ docId }) => docId === item.docId,
           );
           if (change.type === "added") this.docs.push(item);
           if (change.type === "modified") this.docs.splice(index, 1, item);

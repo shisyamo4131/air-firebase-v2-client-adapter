@@ -70,6 +70,11 @@ export const ERRORS = {
     message: "search string cannot be empty",
     userMessage: "検索文字列を入力してください",
   },
+  VALIDATION_FIELD_ERROR: {
+    code: "VALIDATION/FIELD_ERROR",
+    message: "validation failed",
+    userMessage: "入力内容に誤りがあります",
+  },
 
   // データベース操作エラー (DATABASE)
   DATABASE_DOCUMENT_NOT_FOUND: {
