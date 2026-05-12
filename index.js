@@ -333,7 +333,9 @@ class ClientAdapter {
       if (err instanceof ClientAdapterError) {
         throw err;
       } else if (err.name === "ValidationError") {
-        throw new ClientAdapterError(ERRORS.VALIDATION_FIELD_ERROR, err);
+        // BaseClass のエラーをそのままスローする
+        // throw new ClientAdapterError(ERRORS.VALIDATION_FIELD_ERROR, err);
+        throw err;
       } else {
         this._outputErrorConsole("create", err);
         throw new ClientAdapterError(ERRORS.SYSTEM_UNKNOWN_ERROR, err);
@@ -695,7 +697,9 @@ class ClientAdapter {
       if (err instanceof ClientAdapterError) {
         throw err;
       } else if (err.name === "ValidationError") {
-        throw new ClientAdapterError(ERRORS.VALIDATION_FIELD_ERROR, err);
+        // BaseClass のエラーをそのままスローする
+        // throw new ClientAdapterError(ERRORS.VALIDATION_FIELD_ERROR, err);
+        throw err;
       } else {
         this._outputErrorConsole("update", err);
         throw new ClientAdapterError(ERRORS.SYSTEM_UNKNOWN_ERROR, err);
