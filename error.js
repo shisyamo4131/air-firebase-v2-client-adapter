@@ -40,6 +40,11 @@ export const ERRORS = {
     message: "transaction is required",
     userMessage: "トランザクションが必要です",
   },
+  VALIDATION_MISSING_PREFIX: {
+    code: "VALIDATION/MISSING_PREFIX",
+    message: "prefix is required",
+    userMessage: "プレフィックスが必要です",
+  },
   VALIDATION_INVALID_CALLBACK: {
     code: "VALIDATION/INVALID_CALLBACK",
     message: "callback must be a function",
@@ -118,6 +123,11 @@ export const ERRORS = {
     code: "BUSINESS/AUTONUMBER_MAX_REACHED",
     message: "autonumber maximum reached",
     userMessage: "採番の上限に達しています",
+  },
+  BUSINESS_AUTONUMBER_CONFIG_INVALID: {
+    code: "BUSINESS/AUTONUMBER_CONFIG_INVALID",
+    message: "useAutonumber configuration is invalid",
+    userMessage: "自動採番の設定が不正です",
   },
   BUSINESS_DOCUMENT_UNDELETABLE: {
     code: "BUSINESS/DOCUMENT_UNDELETABLE",

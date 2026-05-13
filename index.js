@@ -146,52 +146,95 @@ class ClientAdapter {
   /**
    * Assigns an autonumber to the instance using a Firestore transaction.
    * - Retrieves the current autonumber doc from the `Autonumbers` collection.
+   * - If the document does not exist, it creates one using the class configuration.
    * - Increments the number and sets it on the instance.
    * - Returns a function to update the `current` value in Firestore.
-   * - `prefix` is used to resolve the collection path if provided.
+   * - `prefix` is required to resolve the collection path (e.g., "Companies/abc123/").
    * @param {Object} args - Autonumber options.
    * @param {Object} args.transaction - Firestore transaction object (required).
-   * @param {string|null} [args.prefix=null] - Optional path prefix.
+   * @param {string} args.prefix - Path prefix (required, e.g., "Companies/abc123/").
    * @returns {Promise<Function>} Function that updates the current counter.
-   * @throws {Error} If transaction is not provided or autonumber is invalid.
+   * @throws {ClientAdapterError} If transaction/prefix is missing or autonumber is invalid.
    */
   async setAutonumber({ transaction, prefix = null } = {}) {
     if (!transaction) {
       throw new ClientAdapterError(ERRORS.VALIDATION_MISSING_TRANSACTION);
     }
 
+    if (!prefix) {
+      throw new ClientAdapterError(ERRORS.VALIDATION_MISSING_PREFIX);
+    }
+
     try {
-      let effectivePrefix =
-        prefix || this.constructor.getConfig()?.prefix || "";
-      if (effectivePrefix && !effectivePrefix.endsWith("/")) {
-        effectivePrefix += "/";
-      }
-      const collectionPath = effectivePrefix + "Autonumbers";
-      const docRef = doc(collection(ClientAdapter.firestore, collectionPath));
+      // Get collection name from class (e.g., "Employees", "Customers")
+      const collectionName = this.constructor.collection;
+
+      // Build autonumber document path
+      // e.g., "Companies/abc123/Autonumbers/Employees"
+      const autonumberPath = `${prefix}Autonumbers/${collectionName}`;
+      const docRef = doc(ClientAdapter.firestore, autonumberPath);
+
+      // Get autonumber document
       const docSnap = await transaction.get(docRef);
+
+      let data;
+      let newNumber;
+
       if (!docSnap.exists()) {
-        throw new ClientAdapterError(
-          ERRORS.BUSINESS_AUTONUMBER_DOCUMENT_NOT_FOUND,
-        );
+        // Document does not exist - create it using class configuration
+        const config = this.constructor.useAutonumber;
+
+        if (!config || typeof config !== "object") {
+          throw new ClientAdapterError(
+            ERRORS.BUSINESS_AUTONUMBER_CONFIG_INVALID,
+          );
+        }
+
+        data = {
+          current: 0,
+          length: config.length || 6,
+          field: config.field || "code",
+          prefix: config.prefix || "", // Code prefix (e.g., "E" for Employees)
+          status: true, // Always enabled on creation
+        };
+
+        newNumber = 1;
+        const codePrefix = data.prefix || "";
+        const newCode =
+          codePrefix + String(newNumber).padStart(data.length, "0");
+        this[data.field] = newCode;
+
+        // Create the document with initial values
+        transaction.set(docRef, { ...data, current: newNumber });
+
+        // Return empty function (already set in transaction)
+        return () => {};
+      } else {
+        // Document exists - use existing configuration
+        data = docSnap.data();
+
+        // Check if autonumber is enabled
+        if (!data?.status) {
+          throw new ClientAdapterError(ERRORS.BUSINESS_AUTONUMBER_DISABLED);
+        }
+
+        // Calculate new number
+        newNumber = data.current + 1;
+        const length = data.length;
+        const maxValue = Math.pow(10, length) - 1;
+
+        if (newNumber > maxValue) {
+          throw new ClientAdapterError(ERRORS.BUSINESS_AUTONUMBER_MAX_REACHED);
+        }
+
+        // Generate new code with prefix and zero-padding
+        const codePrefix = data.prefix || "";
+        const newCode = codePrefix + String(newNumber).padStart(length, "0");
+        this[data.field] = newCode;
+
+        // Return function to update autonumber document
+        return () => transaction.update(docRef, { current: newNumber });
       }
-
-      const data = docSnap.data();
-
-      if (!data?.status) {
-        throw new ClientAdapterError(ERRORS.BUSINESS_AUTONUMBER_DISABLED);
-      }
-
-      const newNumber = data.current + 1;
-      const length = data.length;
-      const maxValue = Math.pow(10, length) - 1;
-      if (newNumber > maxValue) {
-        throw new ClientAdapterError(ERRORS.BUSINESS_AUTONUMBER_MAX_REACHED);
-      }
-
-      const newCode = String(newNumber).padStart(length, "0");
-      this[data.field] = newCode;
-
-      return () => transaction.update(docRef, { current: newNumber });
     } catch (err) {
       if (err instanceof ClientAdapterError) {
         throw err;
