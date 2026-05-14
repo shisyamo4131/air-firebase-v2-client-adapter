@@ -174,7 +174,7 @@ class ClientAdapter {
       }
 
       // Get collection name from class (e.g., "Employees", "Customers")
-      const collectionName = this.constructor.collection;
+      const collectionName = this.constructor.collectionName;
 
       // Build autonumber document path
       // e.g., "Companies/abc123/Autonumbers/Employees"
