@@ -161,17 +161,24 @@ class ClientAdapter {
       throw new ClientAdapterError(ERRORS.VALIDATION_MISSING_TRANSACTION);
     }
 
-    if (!prefix) {
-      throw new ClientAdapterError(ERRORS.VALIDATION_MISSING_PREFIX);
-    }
-
     try {
+      // Use provided prefix or get from global config
+      let effectivePrefix =
+        prefix || this.constructor.getConfig()?.prefix || "";
+      if (effectivePrefix && !effectivePrefix.endsWith("/")) {
+        effectivePrefix += "/";
+      }
+
+      if (!effectivePrefix) {
+        throw new ClientAdapterError(ERRORS.VALIDATION_MISSING_PREFIX);
+      }
+
       // Get collection name from class (e.g., "Employees", "Customers")
       const collectionName = this.constructor.collection;
 
       // Build autonumber document path
       // e.g., "Companies/abc123/Autonumbers/Employees"
-      const autonumberPath = `${prefix}Autonumbers/${collectionName}`;
+      const autonumberPath = `${effectivePrefix}Autonumbers/${collectionName}`;
       const docRef = doc(ClientAdapter.firestore, autonumberPath);
 
       // Get autonumber document
