@@ -162,12 +162,8 @@ class ClientAdapter {
     }
 
     try {
-      // Use provided prefix or get from global config
-      let effectivePrefix =
-        prefix || this.constructor.getConfig()?.prefix || "";
-      if (effectivePrefix && !effectivePrefix.endsWith("/")) {
-        effectivePrefix += "/";
-      }
+      // Use FireModel's getEffectivePrefix to resolve prefix
+      const effectivePrefix = this.constructor.getEffectivePrefix(prefix);
 
       if (!effectivePrefix) {
         throw new ClientAdapterError(ERRORS.VALIDATION_MISSING_PREFIX);
